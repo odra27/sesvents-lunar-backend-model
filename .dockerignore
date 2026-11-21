@@ -1,0 +1,15 @@
+# Jangan ikutkan rahasia, dependency lokal, dan hasil build ke image deploy.
+**/.env
+**/.env.*
+!**/.env.example
+**/.venv
+**/__pycache__
+**/.pytest_cache
+.git
+ml/exports
+ml/tests
+ml/scripts
+backend/tests
+ml/mp_models
+Database
+*.docx
