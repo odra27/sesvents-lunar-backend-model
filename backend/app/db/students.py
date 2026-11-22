@@ -53,6 +53,7 @@ class StudentLoginTarget:
 
 class StudentRepository(Protocol):
     async def get_profile(self, student_id: UUID) -> StudentProfile | None: ...
+    async def find_login_targets(self, nis: str) -> list[StudentLoginTarget]: ...
     async def find_login_targets_by_email(self, email: str) -> list[StudentLoginTarget]: ...
     async def create_b2c_profile(self, *, user_id: UUID, full_name: str) -> StudentProfile: ...
     async def update_profile(self, student_id: UUID, changes: dict[str, Any]) -> StudentProfile | None: ...
@@ -67,6 +68,15 @@ class PostgresStudentRepository:
             await cur.execute(f"select {_COLS} {_FROM} where s.id = %s", (student_id,))
             row = await cur.fetchone()
         return StudentProfile(*row) if row else None
+
+    async def find_login_targets(self, nis: str) -> list[StudentLoginTarget]:
+        async with self._conn.cursor() as cur:
+            await cur.execute(
+                f"select u.email, {_COLS} {_FROM} where s.nis = %s limit 2",
+                (nis,),
+            )
+            rows = await cur.fetchall()
+        return [StudentLoginTarget(email=r[0], profile=StudentProfile(*r[1:])) for r in rows]
 
     async def find_login_targets_by_email(self, email: str) -> list[StudentLoginTarget]:
         async with self._conn.cursor() as cur:

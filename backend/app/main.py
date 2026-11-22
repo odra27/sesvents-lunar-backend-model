@@ -58,7 +58,8 @@ ChatModelFactory = Callable[[], ChatModel]
 # (main: 5174, landing: 5173). Production: set CORS_ALLOW_ORIGINS (dipisah koma).
 _DEFAULT_CORS_ORIGINS = (
     "http://localhost:5173,http://localhost:5174,"
-    "https://localhost:5174,http://127.0.0.1:5174,https://127.0.0.1:5174"
+    "https://localhost:5174,http://127.0.0.1:5174,https://127.0.0.1:5174,"
+    "https://lunarsesvent.vercel.app"
 )
 
 
@@ -140,6 +141,7 @@ def create_app(
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins(),
+        allow_origin_regex=r"^https://.*\.vercel\.app$",
         allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "X-Visitor-Id"],
         max_age=600,

@@ -70,17 +70,35 @@ def _normalize_email(v: str) -> str:
     return v
 
 
+_DEFAULT_INSTITUTION_ID = UUID("00000000-0000-0000-0000-00000000b001")
+_DEFAULT_INSTITUTION_NAME = "LUNAR"
+
+
 class StudentLoginRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    email: StrictStr = Field(min_length=3, max_length=320)
+    email: StrictStr | None = Field(default=None, min_length=1, max_length=320)
+    nis: StrictStr | None = Field(default=None, min_length=1, max_length=320)
     password: StrictStr = Field(min_length=1, max_length=1024)
     visitor_id: UUID | None = None
 
-    @field_validator("email")
-    @classmethod
-    def _email(cls, v: str) -> str:
-        return _normalize_email(v)
+    @model_validator(mode="after")
+    def _check_identifier(self) -> "StudentLoginRequest":
+        raw = self.email if self.email is not None else self.nis
+        if raw is None:
+            raise ValueError("email or nis is required")
+        cleaned = raw.strip()
+        if not cleaned:
+            raise ValueError("identifier must not be blank")
+        if "@" in cleaned:
+            self.email = _normalize_email(cleaned)
+            self.nis = None
+        else:
+            if len(cleaned) > 30:
+                raise ValueError("nis must be at most 30 characters")
+            self.nis = cleaned
+            self.email = None
+        return self
 
 
 class StudentRegisterRequest(BaseModel):
@@ -160,12 +178,12 @@ def student_out(p: StudentProfile) -> StudentOut:
     institution = (
         InstitutionOut(id=p.institution_id, name=p.institution_name)
         if p.institution_id is not None and p.institution_name is not None
-        else None
+        else InstitutionOut(id=_DEFAULT_INSTITUTION_ID, name=_DEFAULT_INSTITUTION_NAME)
     )
     return StudentOut(
         id=p.id,
         email=p.email,
-        nis=p.nis,
+        nis=p.nis if p.nis is not None else (p.email or ""),
         full_name=p.full_name,
         class_name=p.class_name,
         grade=p.grade,
@@ -217,7 +235,10 @@ async def student_login(payload: StudentLoginRequest, request: Request, response
     async with request.app.state.open_db() as db:
         if db.students is None:
             raise RuntimeError("student repository missing")
-        targets = await db.students.find_login_targets_by_email(payload.email)
+        if payload.email is not None:
+            targets = await db.students.find_login_targets_by_email(payload.email)
+        else:
+            targets = await db.students.find_login_targets(payload.nis or "")
     if len(targets) != 1:
         raise InvalidCredentials(_INVALID)
     target = targets[0]

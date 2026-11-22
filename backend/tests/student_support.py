@@ -79,6 +79,9 @@ class FakeStudentRepo:
         row = self.rows.get(student_id)
         return row[1] if row else None
 
+    async def find_login_targets(self, nis: str) -> list[StudentLoginTarget]:
+        return [StudentLoginTarget(email=e, profile=p) for e, p in self.rows.values() if p.nis == nis][:2]
+
     async def find_login_targets_by_email(self, email: str) -> list[StudentLoginTarget]:
         target = email.strip().lower()
         return [
