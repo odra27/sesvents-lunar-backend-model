@@ -1,0 +1,15 @@
+# Slim production runtime dependencies for Vercel Serverless (< 250 MB limit).
+# Excludes training/evaluation-only packages (scipy, scikit-learn, matplotlib, torch, mediapipe).
+pydantic==2.11.9
+psycopg[binary]==3.3.6
+fastapi==0.141.1
+starlette==1.7.0
+uvicorn==0.54.0
+PyJWT[crypto]==2.15.1
+cryptography==50.0.1
+httpx==0.28.1
+python-multipart==0.0.32
+pypdf==6.20.1
+numpy==2.2.6
+onnxruntime==1.23.2
+pyyaml==6.0.3
