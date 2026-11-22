@@ -145,7 +145,7 @@ def test_register_b2c_and_complete_profile(client):
         json={
             "full_name": "  Nadia  ",
             "email": "Baru@Gmail.com",
-            "phone": " +62 812-3456-7890 ",
+            "phone": "081234567890",
             "password": "Password123",
         },
     )
@@ -154,7 +154,7 @@ def test_register_b2c_and_complete_profile(client):
     data = r.json()
     assert data["student"]["full_name"] == "Nadia"
     assert data["student"]["email"] == "baru@gmail.com"
-    assert data["student"]["phone"] == "+6281234567890"
+    assert data["student"]["phone"] == "081234567890"
     assert data["student"]["nis"] == "baru@gmail.com"
     assert data["student"]["institution"] == {"id": "00000000-0000-0000-0000-00000000b001", "name": "LUNAR"}
     assert data["student"]["grade"] is None
@@ -165,7 +165,7 @@ def test_register_b2c_and_complete_profile(client):
     p = client.patch(
         "/api/student/me",
         headers=h,
-        json={"grade": 5, "class_code": " LNR-5A21 ", "phone": "0812 9999 0000"},
+        json={"grade": 5, "class_code": " LNR-5A21 ", "phone": "081299990000"},
     )
     assert p.status_code == 200, p.text
     assert p.json()["grade"] == 5 and p.json()["class_code"] == "LNR-5A21"
@@ -197,8 +197,14 @@ def test_register_duplicate_email_409_and_rollback_on_db_failure(client, db, aut
     {"full_name": " ", "email": "a@b.com", "phone": "081234567890", "password": "Password123"},
     {"full_name": "A", "email": "not-email", "phone": "081234567890", "password": "Password123"},
     {"full_name": "A", "email": "a@b.com", "password": "Password123"},  # missing required phone
-    {"full_name": "A", "email": "a@b.com", "phone": "12345", "password": "Password123"},  # too short
-    {"full_name": "A", "email": "a@b.com", "phone": "0812-abc-7890", "password": "Password123"},  # letters
+    {"full_name": "A", "email": "a@b.com", "phone": "0812345", "password": "Password123"},  # < 8 digits
+    {"full_name": "A", "email": "a@b.com", "phone": "0812345678901234", "password": "Password123"},  # > 15 digits
+    {"full_name": "A", "email": "a@b.com", "phone": "+6281234567890", "password": "Password123"},  # starts with +62
+    {"full_name": "A", "email": "a@b.com", "phone": "6281234567890", "password": "Password123"},  # not starting with 0
+    {"full_name": "A", "email": "a@b.com", "phone": "0812 3456 7890", "password": "Password123"},  # spaces
+    {"full_name": "A", "email": "a@b.com", "phone": "0812-3456-7890", "password": "Password123"},  # dashes
+    {"full_name": "A", "email": "a@b.com", "phone": " 081234567890", "password": "Password123"},  # leading space
+    {"full_name": "A", "email": "a@b.com", "phone": "0812abc7890", "password": "Password123"},  # letters
     {"full_name": "A", "email": "a@b.com", "phone": "081234567890", "password": "short"},  # < 8 chars
     {"full_name": "A", "email": "a@b.com", "phone": "081234567890", "password": "Password123", "role": "admin"},
 ])
@@ -214,7 +220,10 @@ def test_register_validation_422(client, payload):
     {"grade": 13},
     {"full_name": "   "},
     {"phone": None},
-    {"phone": "1234"},
+    {"phone": "0812345"},
+    {"phone": "+6281234567890"},
+    {"phone": "0812-3456-7890"},
+    {"phone": "0812 3456 7890"},
     {"phone": "abc1234567"},
     {"nis": "1234"},  # immutable / forbidden
 ])

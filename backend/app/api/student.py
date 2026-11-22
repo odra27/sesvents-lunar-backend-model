@@ -56,7 +56,7 @@ _UNAVAILABLE = "Authentication service unavailable"
 _CONFLICT = "Email is already registered"
 _NO_STORE = {"Cache-Control": "no-store"}
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-_PHONE_ALLOWED_RE = re.compile(r"^\+?[0-9\s\-()]+$")
+_PHONE_RE = re.compile(r"^0[0-9]{7,14}$")
 
 
 class _ValidationRejected(BackendError):
@@ -71,15 +71,10 @@ def _normalize_email(v: str) -> str:
     return v
 
 
-def _normalize_phone(v: str) -> str:
-    v = v.strip()
-    if not v or not _PHONE_ALLOWED_RE.match(v):
-        raise ValueError("phone must be a valid phone number")
-    prefix = "+" if v.startswith("+") else ""
-    digits = re.sub(r"\D", "", v)
-    if not (8 <= len(digits) <= 15):
-        raise ValueError("phone must contain between 8 and 15 digits")
-    return f"{prefix}{digits}"
+def _validate_phone(v: str) -> str:
+    if not _PHONE_RE.match(v):
+        raise ValueError("phone must start with 0 and contain 8 to 15 digits only (no spaces or dashes)")
+    return v
 
 
 _DEFAULT_INSTITUTION_ID = UUID("00000000-0000-0000-0000-00000000b001")
@@ -104,7 +99,7 @@ class StudentRegisterRequest(BaseModel):
 
     full_name: StrictStr = Field(min_length=1, max_length=100)
     email: StrictStr = Field(min_length=3, max_length=320)
-    phone: StrictStr = Field(min_length=8, max_length=25)
+    phone: StrictStr = Field(min_length=8, max_length=15)
     password: StrictStr = Field(min_length=8, max_length=1024)
     visitor_id: UUID | None = None
 
@@ -124,7 +119,7 @@ class StudentRegisterRequest(BaseModel):
     @field_validator("phone")
     @classmethod
     def _phone(cls, v: str) -> str:
-        return _normalize_phone(v)
+        return _validate_phone(v)
 
 
 class StudentProfilePatch(BaseModel):
@@ -133,7 +128,7 @@ class StudentProfilePatch(BaseModel):
     full_name: StrictStr | None = Field(default=None, min_length=1, max_length=100)
     grade: StrictInt | None = Field(default=None, ge=1, le=12)
     class_code: StrictStr | None = Field(default=None, max_length=30)
-    phone: StrictStr | None = Field(default=None, min_length=8, max_length=25)
+    phone: StrictStr | None = Field(default=None, min_length=8, max_length=15)
 
     @model_validator(mode="after")
     def _check_fields(self) -> "StudentProfilePatch":
@@ -151,7 +146,7 @@ class StudentProfilePatch(BaseModel):
         if "phone" in self.model_fields_set:
             if self.phone is None:
                 raise ValueError("phone must not be null")
-            self.phone = _normalize_phone(self.phone)
+            self.phone = _validate_phone(self.phone)
         return self
 
     def changes(self) -> dict:
