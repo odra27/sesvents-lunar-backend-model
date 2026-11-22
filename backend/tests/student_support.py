@@ -34,6 +34,7 @@ def student(
     account_type: str | None = None,
     grade: int | None = 5,
     class_code: str | None = None,
+    phone: str | None = None,
     institution_id: UUID | None = SCHOOL,
     institution_name: str | None = "SLB Negeri Contoh",
 ) -> StudentProfile:
@@ -50,6 +51,7 @@ def student(
         account_type=account_type,
         email=email,
         class_code=class_code,
+        phone=phone,
     )
 
 
@@ -90,7 +92,7 @@ class FakeStudentRepo:
             if e and e.lower() == target
         ][:2]
 
-    async def create_b2c_profile(self, *, user_id: UUID, full_name: str) -> StudentProfile:
+    async def create_b2c_profile(self, *, user_id: UUID, full_name: str, phone: str) -> StudentProfile:
         if self.fail_create:
             raise RuntimeError("db insert failed")
         email = getattr(self, "_last_created_email", None)
@@ -101,6 +103,7 @@ class FakeStudentRepo:
             full_name=full_name,
             grade=None,
             class_code=None,
+            phone=phone,
             institution_id=None,
             institution_name=None,
         )

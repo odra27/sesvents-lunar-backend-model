@@ -18,7 +18,7 @@ from psycopg import AsyncConnection
 
 _COLS = (
     "s.id, s.institution_id, i.name, s.nis, s.full_name, s.class_name, s.grade,"
-    " s.avatar_url, s.active, s.account_type, u.email, s.class_code"
+    " s.avatar_url, s.active, s.account_type, u.email, s.class_code, s.phone"
 )
 _FROM = (
     "from student_profiles s"
@@ -26,7 +26,7 @@ _FROM = (
     " left join auth.users u on u.id = s.id"
 )
 
-WRITABLE_PROFILE_FIELDS = ("full_name", "grade", "class_code")
+WRITABLE_PROFILE_FIELDS = ("full_name", "grade", "class_code", "phone")
 
 
 @dataclass(frozen=True)
@@ -43,6 +43,7 @@ class StudentProfile:
     account_type: str | None = None
     email: str | None = None
     class_code: str | None = None
+    phone: str | None = None
 
 
 @dataclass(frozen=True)
@@ -55,7 +56,7 @@ class StudentRepository(Protocol):
     async def get_profile(self, student_id: UUID) -> StudentProfile | None: ...
     async def find_login_targets(self, nis: str) -> list[StudentLoginTarget]: ...
     async def find_login_targets_by_email(self, email: str) -> list[StudentLoginTarget]: ...
-    async def create_b2c_profile(self, *, user_id: UUID, full_name: str) -> StudentProfile: ...
+    async def create_b2c_profile(self, *, user_id: UUID, full_name: str, phone: str) -> StudentProfile: ...
     async def update_profile(self, student_id: UUID, changes: dict[str, Any]) -> StudentProfile | None: ...
 
 
@@ -87,11 +88,12 @@ class PostgresStudentRepository:
             rows = await cur.fetchall()
         return [StudentLoginTarget(email=r[0], profile=StudentProfile(*r[1:])) for r in rows]
 
-    async def create_b2c_profile(self, *, user_id: UUID, full_name: str) -> StudentProfile:
+    async def create_b2c_profile(self, *, user_id: UUID, full_name: str, phone: str) -> StudentProfile:
         async with self._conn.cursor() as cur:
             await cur.execute(
-                "insert into student_profiles (id, full_name, account_type) values (%s, %s, 'student')",
-                (user_id, full_name),
+                "insert into student_profiles (id, full_name, phone, account_type)"
+                " values (%s, %s, %s, 'student')",
+                (user_id, full_name, phone),
             )
         profile = await self.get_profile(user_id)
         if profile is None:

@@ -62,6 +62,7 @@ def test_login_with_email(client, gotrue):
         "email": "nadia@siswa.test",
         "nis": "0012345678",
         "full_name": "Nadia Putri",
+        "phone": None,
         "class_name": "5A",
         "grade": 5,
         "class_code": None,
@@ -141,23 +142,34 @@ def test_password_never_echoed_or_logged(client, caplog):
 def test_register_b2c_and_complete_profile(client):
     r = client.post(
         "/api/student/auth/register",
-        json={"full_name": "  Nadia  ", "email": "Baru@Gmail.com", "password": "Password123"},
+        json={
+            "full_name": "  Nadia  ",
+            "email": "Baru@Gmail.com",
+            "phone": " +62 812-3456-7890 ",
+            "password": "Password123",
+        },
     )
     assert r.status_code == 201, r.text
     assert r.headers["cache-control"] == "no-store"
     data = r.json()
     assert data["student"]["full_name"] == "Nadia"
     assert data["student"]["email"] == "baru@gmail.com"
+    assert data["student"]["phone"] == "+6281234567890"
     assert data["student"]["nis"] == "baru@gmail.com"
     assert data["student"]["institution"] == {"id": "00000000-0000-0000-0000-00000000b001", "name": "LUNAR"}
     assert data["student"]["grade"] is None
     assert data["student"]["class_code"] is None
 
-    # Step 2: Lengkapi profil (pilih SD 5 + kode kelas opsional)
+    # Step 2: Lengkapi profil (pilih SD 5 + kode kelas opsional + ubah nomor telepon)
     h = {"Authorization": f"Bearer {data['access_token']}"}
-    p = client.patch("/api/student/me", headers=h, json={"grade": 5, "class_code": " LNR-5A21 "})
+    p = client.patch(
+        "/api/student/me",
+        headers=h,
+        json={"grade": 5, "class_code": " LNR-5A21 ", "phone": "0812 9999 0000"},
+    )
     assert p.status_code == 200, p.text
     assert p.json()["grade"] == 5 and p.json()["class_code"] == "LNR-5A21"
+    assert p.json()["phone"] == "081299990000"
 
     # Skip / clear class_code
     p2 = client.patch("/api/student/me", headers=h, json={"class_code": "   "})
@@ -167,14 +179,14 @@ def test_register_b2c_and_complete_profile(client):
 def test_register_duplicate_email_409_and_rollback_on_db_failure(client, db, auth_admin):
     dup = client.post(
         "/api/student/auth/register",
-        json={"full_name": "Nadia", "email": "nadia@siswa.test", "password": "Password123"},
+        json={"full_name": "Nadia", "email": "nadia@siswa.test", "phone": "081234567890", "password": "Password123"},
     )
     assert dup.status_code == 409 and dup.json()["error"]["code"] == "CONFLICT"
 
     db.students.fail_create = True
     fail = client.post(
         "/api/student/auth/register",
-        json={"full_name": "Gagal", "email": "gagal@gmail.com", "password": "Password123"},
+        json={"full_name": "Gagal", "email": "gagal@gmail.com", "phone": "081234567890", "password": "Password123"},
     )
     assert fail.status_code == 500
     assert len(auth_admin.deleted) == 1 and auth_admin.deleted[0] == auth_admin.created[-1]
@@ -182,10 +194,13 @@ def test_register_duplicate_email_409_and_rollback_on_db_failure(client, db, aut
 
 @pytest.mark.parametrize("payload", [
     {},
-    {"full_name": " ", "email": "a@b.com", "password": "Password123"},
-    {"full_name": "A", "email": "not-email", "password": "Password123"},
-    {"full_name": "A", "email": "a@b.com", "password": "short"},  # < 8 chars
-    {"full_name": "A", "email": "a@b.com", "password": "Password123", "role": "admin"},
+    {"full_name": " ", "email": "a@b.com", "phone": "081234567890", "password": "Password123"},
+    {"full_name": "A", "email": "not-email", "phone": "081234567890", "password": "Password123"},
+    {"full_name": "A", "email": "a@b.com", "password": "Password123"},  # missing required phone
+    {"full_name": "A", "email": "a@b.com", "phone": "12345", "password": "Password123"},  # too short
+    {"full_name": "A", "email": "a@b.com", "phone": "0812-abc-7890", "password": "Password123"},  # letters
+    {"full_name": "A", "email": "a@b.com", "phone": "081234567890", "password": "short"},  # < 8 chars
+    {"full_name": "A", "email": "a@b.com", "phone": "081234567890", "password": "Password123", "role": "admin"},
 ])
 def test_register_validation_422(client, payload):
     r = client.post("/api/student/auth/register", json=payload)
@@ -198,6 +213,9 @@ def test_register_validation_422(client, payload):
     {"grade": 0},
     {"grade": 13},
     {"full_name": "   "},
+    {"phone": None},
+    {"phone": "1234"},
+    {"phone": "abc1234567"},
     {"nis": "1234"},  # immutable / forbidden
 ])
 def test_patch_me_validation_422(client, admin_auth, payload):

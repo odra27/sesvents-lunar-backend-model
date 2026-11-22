@@ -226,7 +226,12 @@ def test_self_registered_student_creates_tracked_student_session(admin_auth, mon
     ) as c:
         r = c.post(
             "/api/student/auth/register",
-            json={"full_name": "Budi Santoso", "email": "budi@gmail.com", "password": PASSWORD},
+            json={
+                "full_name": "Budi Santoso",
+                "email": "budi@gmail.com",
+                "phone": "081234567890",
+                "password": PASSWORD,
+            },
         )
         assert r.status_code == 201
         assert len(db.login_sessions.sessions) == 1
