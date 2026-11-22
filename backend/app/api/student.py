@@ -187,8 +187,6 @@ async def _record_login_session(
     body_visitor_id: UUID | None,
 ) -> None:
     account_type = resolve_account_type(profile)
-    if account_type is None:
-        return
     visitor_id = resolve_or_create_visitor_id(request, body_visitor_id)
     try:
         async with request.app.state.open_db() as db:
@@ -367,8 +365,8 @@ async def student_refresh(payload: StudentRefreshRequest, request: Request, resp
         profile = await db.students.get_profile(user_id)
         if profile is None or profile.active is not True:
             raise InvalidCredentials(_INVALID)
-        # ADR-055: token refresh counts as session activity for tracked Demo/Judge accounts (best-effort).
-        if db.login_sessions is not None and resolve_account_type(profile) is not None:
+        # ADR-055 / ADR-057: token refresh counts as session activity for all student accounts (best-effort).
+        if db.login_sessions is not None:
             try:
                 await db.login_sessions.touch_activity(
                     user_id=user_id,
@@ -392,18 +390,17 @@ async def student_refresh(payload: StudentRefreshRequest, request: Request, resp
 async def student_logout(
     request: Request, principal: StudentPrincipal = Depends(require_student)
 ) -> Response:
-    """Record explicit logout for tracked Demo/Judge accounts (ADR-055)."""
-    if resolve_account_type(principal.profile) is not None:
-        try:
-            async with request.app.state.open_db() as db:
-                if db.login_sessions is not None:
-                    await db.login_sessions.end_session(
-                        user_id=principal.user_id,
-                        auth_session_id=principal.auth_session_id,
-                        visitor_id=principal.visitor_id,
-                    )
-        except Exception:
-            pass
+    """Record explicit logout for student accounts (ADR-055 / ADR-057)."""
+    try:
+        async with request.app.state.open_db() as db:
+            if db.login_sessions is not None:
+                await db.login_sessions.end_session(
+                    user_id=principal.user_id,
+                    auth_session_id=principal.auth_session_id,
+                    visitor_id=principal.visitor_id,
+                )
+    except Exception:
+        pass
     return Response(status_code=204, headers=_NO_STORE)
 
 
@@ -411,19 +408,18 @@ async def student_logout(
 async def student_session_heartbeat(
     request: Request, principal: StudentPrincipal = Depends(require_student)
 ) -> Response:
-    """Lightweight heartbeat to update LastActivityAt for tracked Demo/Judge sessions (ADR-055)."""
-    if resolve_account_type(principal.profile) is not None:
-        try:
-            async with request.app.state.open_db() as db:
-                if db.login_sessions is not None:
-                    await db.login_sessions.touch_activity(
-                        user_id=principal.user_id,
-                        auth_session_id=principal.auth_session_id,
-                        visitor_id=principal.visitor_id,
-                        min_interval_seconds=0,
-                    )
-        except Exception:
-            pass
+    """Lightweight heartbeat to update LastActivityAt for student sessions (ADR-055 / ADR-057)."""
+    try:
+        async with request.app.state.open_db() as db:
+            if db.login_sessions is not None:
+                await db.login_sessions.touch_activity(
+                    user_id=principal.user_id,
+                    auth_session_id=principal.auth_session_id,
+                    visitor_id=principal.visitor_id,
+                    min_interval_seconds=0,
+                )
+    except Exception:
+        pass
     return Response(status_code=204, headers=_NO_STORE)
 
 

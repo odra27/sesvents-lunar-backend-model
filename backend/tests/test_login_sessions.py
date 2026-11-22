@@ -41,16 +41,27 @@ def tracked_env(admin_auth, monkeypatch):
         yield c, db, admin_auth
 
 
-def test_regular_student_is_never_tracked(tracked_env):
+def test_regular_student_is_tracked_as_student(tracked_env):
     c, db, auth = tracked_env
     r = c.post("/api/student/auth/login", json={"email": "nadia@siswa.test", "password": PASSWORD})
     assert r.status_code == 200
+    assert len(db.login_sessions.sessions) == 1
+    assert db.login_sessions.sessions[0]["account_type"] == "student"
+    assert db.login_sessions.sessions[0]["user_id"] == SISWA
+
     h = student_headers(auth, SISWA)
+    db.login_sessions.advance(90)
     assert c.get("/api/student/me", headers=h).status_code == 200
+    assert db.login_sessions.sessions[0]["session_duration_seconds"] == 90
+
+    db.login_sessions.advance(30)
     assert c.post("/api/student/session/heartbeat", headers=h).status_code == 204
+    assert db.login_sessions.sessions[0]["session_duration_seconds"] == 120
+
+    db.login_sessions.advance(15)
     assert c.post("/api/student/auth/logout", headers=h).status_code == 204
-    assert db.login_sessions.sessions == []
-    assert db.login_sessions.calls == []
+    assert db.login_sessions.sessions[0]["logout_at"] is not None
+    assert db.login_sessions.sessions[0]["session_duration_seconds"] == 135
 
 
 def test_demo_and_judge_logins_create_distinct_sessions_without_overwriting(tracked_env):
@@ -197,3 +208,28 @@ def test_malformed_visitor_id_in_header_or_cookie_is_replaced_and_body_validated
     )
     assert ok.status_code == 200
     assert isinstance(db.login_sessions.sessions[0]["visitor_id"], UUID)
+
+
+def test_self_registered_student_creates_tracked_student_session(admin_auth, monkeypatch):
+    from tests.student_support import FakeStudentAuthAdmin
+
+    for k in ("DEMO_STUDENT_NIS", "JUDGE_STUDENT_NIS", "DEMO_STUDENT_EMAIL", "JUDGE_STUDENT_EMAIL"):
+        monkeypatch.delenv(k, raising=False)
+    db = FakeStudentDb()
+    gotrue = student_gotrue(admin_auth)
+    auth_admin = FakeStudentAuthAdmin(gotrue, db)
+    with student_client(
+        admin_auth,
+        db.open,
+        auth_client_factory=gotrue.factory(),
+        auth_admin_factory=lambda: auth_admin,
+    ) as c:
+        r = c.post(
+            "/api/student/auth/register",
+            json={"full_name": "Budi Santoso", "email": "budi@gmail.com", "password": PASSWORD},
+        )
+        assert r.status_code == 201
+        assert len(db.login_sessions.sessions) == 1
+        assert db.login_sessions.sessions[0]["account_type"] == "student"
+        assert str(db.login_sessions.sessions[0]["user_id"]) == r.json()["student"]["id"]
+        assert r.cookies.get("lunar_visitor_id") is not None

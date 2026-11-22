@@ -90,7 +90,7 @@ class PostgresStudentRepository:
     async def create_b2c_profile(self, *, user_id: UUID, full_name: str) -> StudentProfile:
         async with self._conn.cursor() as cur:
             await cur.execute(
-                "insert into student_profiles (id, full_name) values (%s, %s)",
+                "insert into student_profiles (id, full_name, account_type) values (%s, %s, 'student')",
                 (user_id, full_name),
             )
         profile = await self.get_profile(user_id)

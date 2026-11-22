@@ -26,7 +26,6 @@ from app.db.login_sessions import (
     ACTIVITY_TOUCH_INTERVAL_S,
     extract_visitor_id,
     jwt_session_id,
-    resolve_account_type,
 )
 from app.db.students import StudentProfile
 from app.errors import Forbidden, Unauthorized
@@ -62,8 +61,8 @@ async def require_student(request: Request) -> StudentPrincipal:
         profile = await db.students.get_profile(user_id)
         if profile is None or profile.active is not True:
             raise Forbidden("Forbidden")
-        # ADR-055: lightweight background activity update for tracked Demo/Judge accounts (best-effort).
-        if db.login_sessions is not None and resolve_account_type(profile) is not None:
+        # ADR-055 / ADR-057: lightweight background activity update for all student accounts (best-effort).
+        if db.login_sessions is not None:
             try:
                 await db.login_sessions.touch_activity(
                     user_id=user_id,

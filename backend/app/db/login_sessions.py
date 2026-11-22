@@ -1,7 +1,8 @@
-"""Login session tracking for Demo & Judge student accounts (ADR-055). psycopg 3, parameterized SQL.
+"""Login session tracking for all student accounts: Demo, Judge, and Student (ADR-055, ADR-057).
 
-Only students identified as 'demo' or 'judge' (via `student_profiles.account_type` or backend env
-`DEMO_STUDENT_NIS` / `JUDGE_STUDENT_NIS`) are recorded. Regular student accounts are untouched.
+Every authenticated student account is recorded in `user_login_sessions` with `account_type`:
+  - `'demo'` / `'judge'` (tagged via `student_profiles.account_type` or env `DEMO_STUDENT_*` / `JUDGE_STUDENT_*`)
+  - `'student'` (all other regular / self-registered B2C student accounts)
 
 Anonymous Visitor Identification:
 * Visitors using the shared Demo or Judge accounts are distinguished by an anonymous UUID
@@ -29,7 +30,7 @@ from psycopg import AsyncConnection
 
 from app.db.students import StudentProfile
 
-AccountType = Literal["demo", "judge"]
+AccountType = Literal["demo", "judge", "student"]
 
 # Sessions without logout and without activity beyond this window are treated as expired.
 INACTIVITY_TIMEOUT_MINUTES = 30
@@ -50,8 +51,8 @@ def _parse_env_set(env_var: str, *, lower: bool = False) -> set[str]:
     }
 
 
-def resolve_account_type(profile: StudentProfile) -> AccountType | None:
-    """Resolve whether a student profile is a tracked 'demo' or 'judge' account."""
+def resolve_account_type(profile: StudentProfile) -> AccountType:
+    """Resolve a student profile's tracking account_type ('demo', 'judge', or 'student')."""
     if profile.account_type in ("demo", "judge"):
         return profile.account_type  # type: ignore[return-value]
     if profile.email:
@@ -65,7 +66,7 @@ def resolve_account_type(profile: StudentProfile) -> AccountType | None:
             return "judge"
         if profile.nis in _parse_env_set("DEMO_STUDENT_NIS"):
             return "demo"
-    return None
+    return "student"
 
 
 def jwt_session_id(claims: dict[str, Any]) -> str | None:

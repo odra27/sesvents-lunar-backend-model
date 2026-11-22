@@ -48,6 +48,11 @@ CHECKS: dict[str, str] = {
         "select exists (select 1 from information_schema.columns"
         " where table_name = 'student_profiles' and column_name = 'class_code')"
     ),
+    "20261122010000_adr057_track_all_student_sessions.sql": (
+        "select exists (select 1 from pg_constraint"
+        " where conname = 'user_login_sessions_account_type_check'"
+        "   and pg_get_constraintdef(oid) like '%student%')"
+    ),
 }
 
 

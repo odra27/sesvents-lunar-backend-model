@@ -258,43 +258,43 @@ async def main() -> int:
                 f"  {d.date.isoformat()} | Login: {d.login_count:>4} | Refresh: {d.token_refreshed_count:>4} | Total: {d.total_events:>4}"
             )
 
-    print("\n4. Ringkasan Sesi Demo & Judge (Tabel user_login_sessions — ADR-055)")
+    print("\n4. Ringkasan Sesi Login (Semua Akun: Demo, Judge, Student — ADR-055/057)")
     if not session_summary:
-        print("Belum ada akun bertipe demo/judge atau belum ada sesi di user_login_sessions.")
+        print("Belum ada akun atau sesi di user_login_sessions.")
     else:
         print(
-            f"{'Tipe':<8} {'NIS':<15} {'Nama':<22} {'Pernah?':<8} {'Logins':>6} {'Visitors':>8} {'Aktif':>6} {'Durasi(s)':>10}  {'Terakhir Login'}"
+            f"{'Tipe':<8} {'Email / NIS':<28} {'Nama':<22} {'Pernah?':<8} {'Logins':>6} {'Visitors':>8} {'Aktif':>6} {'Durasi(s)':>10}  {'Terakhir Login'}"
         )
-        print("-" * 112)
-        for acc_type, nis, name, used, logins, visitors, last_in, active_s, dur_s in session_summary:
+        print("-" * 125)
+        for acc_type, ident, name, used, logins, visitors, last_in, active_s, dur_s in session_summary:
             last_str = (
                 last_in.astimezone(zone).strftime("%Y-%m-%d %H:%M:%S %Z")
                 if last_in is not None
                 else "Belum pernah"
             )
             print(
-                f"{(acc_type or '-'):<8} {nis:<15} {name[:21]:<22} {('Ya' if used else 'Tidak'):<8} {logins:>6} {visitors:>8} {active_s:>6} {dur_s:>10}  {last_str}"
+                f"{(acc_type or '-'):<8} {ident[:27]:<28} {name[:21]:<22} {('Ya' if used else 'Tidak'):<8} {logins:>6} {visitors:>8} {active_s:>6} {dur_s:>10}  {last_str}"
             )
 
     print("\n5. Ringkasan per Anonymous Visitor ID (user_login_visitor_summary)")
     if not visitor_summary:
         print("Belum ada visitor tercatat di user_login_sessions.")
     else:
-        for vid, acc_type, nis, logins, first_in, last_in, active_s, dur_s in visitor_summary:
+        for vid, acc_type, ident, logins, first_in, last_in, active_s, dur_s in visitor_summary:
             last_str = last_in.astimezone(zone).strftime("%Y-%m-%d %H:%M:%S %Z")
             print(
-                f"  Visitor {vid} | {acc_type:<5} (NIS {nis}) | Logins: {logins:>3} | Aktif: {active_s:>2} | Durasi: {dur_s:>5}s | Terakhir: {last_str}"
+                f"  Visitor {vid} | {acc_type:<7} ({ident}) | Logins: {logins:>3} | Aktif: {active_s:>2} | Durasi: {dur_s:>5}s | Terakhir: {last_str}"
             )
 
     print("\n6. Riwayat Sesi Terbaru (user_login_sessions_status)")
     if not recent_sessions:
         print("Belum ada riwayat sesi di user_login_sessions.")
     else:
-        for sid, vid, acc_type, nis, login_at, last_act, ended_at, dur_s, status in recent_sessions:
+        for sid, vid, acc_type, ident, login_at, last_act, ended_at, dur_s, status in recent_sessions:
             in_str = login_at.astimezone(zone).strftime("%Y-%m-%d %H:%M:%S")
             end_str = ended_at.astimezone(zone).strftime("%H:%M:%S") if ended_at else "masih berjalan"
             print(
-                f"  [{status:<10}] {acc_type:<5} (NIS {nis}) | Login: {in_str} | Selesai: {end_str:<14} | Durasi: {dur_s:>4}s | Visitor: {(vid or '-')[:8]}… | Session: {sid[:8]}…"
+                f"  [{status:<10}] {acc_type:<7} ({ident}) | Login: {in_str} | Selesai: {end_str:<14} | Durasi: {dur_s:>4}s | Visitor: {(vid or '-')[:8]}… | Session: {sid[:8]}…"
             )
     return 0
 
