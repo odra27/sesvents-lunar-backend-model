@@ -5,11 +5,5 @@
       "source": "/(.*)",
       "destination": "/api/index.py"
     }
-  ],
-  "functions": {
-    "api/index.py": {
-      "maxDuration": 30,
-      "excludeFiles": "{ml/mp_models/**,ml/artifacts/audio/**,backend/tests/**,ml/tests/**,ml/scripts/**,ml/exports/**,Database/**,**/*.docx}"
-    }
-  }
+  ]
 }

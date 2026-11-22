@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+.venv
+backend/.venv
+**/__pycache__
+**/.pytest_cache
+ml/mp_models
+ml/artifacts/audio
+ml/exports
+ml/tests
+ml/scripts
+backend/tests
+Database
+*.docx
