@@ -41,19 +41,30 @@ VISITOR_HEADER_NAME = "x-visitor-id"
 VISITOR_COOKIE_MAX_AGE_S = 365 * 24 * 3600  # 1 year
 
 
-def _parse_env_nis_set(env_var: str) -> set[str]:
+def _parse_env_set(env_var: str, *, lower: bool = False) -> set[str]:
     raw = os.environ.get(env_var, "")
-    return {part.strip() for part in raw.split(",") if part.strip()}
+    return {
+        (part.strip().lower() if lower else part.strip())
+        for part in raw.split(",")
+        if part.strip()
+    }
 
 
 def resolve_account_type(profile: StudentProfile) -> AccountType | None:
     """Resolve whether a student profile is a tracked 'demo' or 'judge' account."""
     if profile.account_type in ("demo", "judge"):
         return profile.account_type  # type: ignore[return-value]
-    if profile.nis in _parse_env_nis_set("JUDGE_STUDENT_NIS"):
-        return "judge"
-    if profile.nis in _parse_env_nis_set("DEMO_STUDENT_NIS"):
-        return "demo"
+    if profile.email:
+        email_l = profile.email.strip().lower()
+        if email_l in _parse_env_set("JUDGE_STUDENT_EMAIL", lower=True):
+            return "judge"
+        if email_l in _parse_env_set("DEMO_STUDENT_EMAIL", lower=True):
+            return "demo"
+    if profile.nis:
+        if profile.nis in _parse_env_set("JUDGE_STUDENT_NIS"):
+            return "judge"
+        if profile.nis in _parse_env_set("DEMO_STUDENT_NIS"):
+            return "demo"
     return None
 
 

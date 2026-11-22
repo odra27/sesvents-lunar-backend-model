@@ -60,8 +60,8 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--simulate-login",
-        metavar="NIS",
-        help="Uji login nyata ke Backend + Supabase Auth tanpa Frontend untuk NIS tertentu (mis. --simulate-login 12345678).",
+        metavar="EMAIL",
+        help="Uji login nyata ke Backend + Supabase Auth tanpa Frontend untuk email tertentu (mis. --simulate-login demo@lunar.app).",
     )
     p.add_argument(
         "--keep-active",
@@ -71,13 +71,13 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-async def _run_simulated_login(nis: str, *, keep_active: bool) -> int:
+async def _run_simulated_login(email: str, *, keep_active: bool) -> int:
     import httpx
 
     from app.errors import ModelingUnavailable
     from app.main import create_app
 
-    password = os.environ.get("STUDENT_PASSWORD") or getpass.getpass(f"Masukkan password untuk NIS {nis}: ")
+    password = os.environ.get("STUDENT_PASSWORD") or getpass.getpass(f"Masukkan password untuk {email}: ")
     if not password:
         print("Error: Password tidak boleh kosong.", file=sys.stderr)
         return 2
@@ -89,10 +89,10 @@ async def _run_simulated_login(nis: str, *, keep_active: bool) -> int:
     async with app.router.lifespan_context(app):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
-            print(f"\n[Simulasi] 1. POST /api/student/auth/login (NIS: {nis}) ...")
+            print(f"\n[Simulasi] 1. POST /api/student/auth/login (Email: {email}) ...")
             r_login = await client.post(
                 "/api/student/auth/login",
-                json={"nis": nis, "password": password},
+                json={"email": email, "password": password},
             )
             if r_login.status_code != 200:
                 print(f"Login gagal (HTTP {r_login.status_code}): {r_login.text}", file=sys.stderr)
@@ -163,20 +163,20 @@ async def main() -> int:
         report = await repo.get_account_usage(nis_list=nis_list, since=since, tz_name=tz_name)
         async with conn.cursor() as cur:
             await cur.execute(
-                "select account_type, nis, full_name, ever_used, total_logins, unique_visitors,"
-                " last_login_at, active_sessions, total_duration_seconds"
-                " from user_login_account_summary order by account_type, nis"
+                "select account_type, coalesce(email, nis, '-') as ident, full_name, ever_used, total_logins,"
+                " unique_visitors, last_login_at, active_sessions, total_duration_seconds"
+                " from user_login_account_summary order by account_type, ident"
             )
             session_summary = await cur.fetchall()
             await cur.execute(
-                "select visitor_id::text, account_type, nis, total_logins, first_login_at, last_login_at,"
-                " active_sessions, total_duration_seconds"
+                "select visitor_id::text, account_type, coalesce(email, nis, '-') as ident, total_logins,"
+                " first_login_at, last_login_at, active_sessions, total_duration_seconds"
                 " from user_login_visitor_summary order by last_login_at desc limit 20"
             )
             visitor_summary = await cur.fetchall()
             await cur.execute(
-                "select session_id::text, visitor_id::text, account_type, nis, login_at, last_activity_at,"
-                " effective_ended_at, session_duration_seconds, session_status"
+                "select session_id::text, visitor_id::text, account_type, coalesce(email, nis, '-') as ident,"
+                " login_at, last_activity_at, effective_ended_at, session_duration_seconds, session_status"
                 " from user_login_sessions_status order by login_at desc limit 20"
             )
             recent_sessions = await cur.fetchall()
@@ -224,16 +224,17 @@ async def main() -> int:
         return 0
 
     print("1. Ringkasan per Akun")
-    print(f"{'NIS':<15} {'Nama':<25} {'Login':>8} {'Refresh':>9} {'Total':>8}  {'Terakhir Login'}")
-    print("-" * 92)
+    print(f"{'Email / NIS':<28} {'Nama':<22} {'Login':>6} {'Refresh':>8} {'Total':>6}  {'Terakhir Login'}")
+    print("-" * 102)
     for a in report.accounts:
         last_str = (
             a.last_sign_in_at.astimezone(zone).strftime("%Y-%m-%d %H:%M:%S %Z")
             if a.last_sign_in_at is not None
             else "Belum pernah"
         )
+        ident = a.email or a.nis or "-"
         print(
-            f"{a.nis:<15} {a.full_name[:24]:<25} {a.login_count:>8} {a.token_refreshed_count:>9} {a.total_events:>8}  {last_str}"
+            f"{ident[:27]:<28} {a.full_name[:21]:<22} {a.login_count:>6} {a.token_refreshed_count:>8} {a.total_events:>6}  {last_str}"
         )
 
     print("\n2. Jam Sibuk Kunjungan (Peak Hours)")

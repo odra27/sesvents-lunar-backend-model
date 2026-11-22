@@ -514,6 +514,7 @@ def test_exact_production_route_surface():
         ("GET", "/api/student/me"),
         ("PATCH", "/api/admin/phrases/{phrase_id}"),
         ("PATCH", "/api/chat/sessions/{session_id}"),
+        ("PATCH", "/api/student/me"),  # ADR-056
         ("POST", "/api/admin/phrases"),
         ("POST", "/api/admin/phrases/{phrase_id}/references"),
         ("POST", "/api/admin/staff"),
@@ -525,9 +526,11 @@ def test_exact_production_route_surface():
         ("POST", "/api/kiosk/call-jbi"),
         ("POST", "/api/logs"),
         ("POST", "/api/match/sign"),
+        ("POST", "/api/student/auth/forgot-password"),  # ADR-056
         ("POST", "/api/student/auth/login"),
         ("POST", "/api/student/auth/logout"),  # ADR-055
         ("POST", "/api/student/auth/refresh"),
+        ("POST", "/api/student/auth/register"),  # ADR-056
         ("POST", "/api/student/session/heartbeat"),  # ADR-055
     ]
 

@@ -44,6 +44,10 @@ CHECKS: dict[str, str] = {
         "select exists (select 1 from information_schema.columns"
         " where table_name = 'user_login_sessions' and column_name = 'login_at_wib')"
     ),
+    "20261122000000_adr056_b2c_email_login_register.sql": (
+        "select exists (select 1 from information_schema.columns"
+        " where table_name = 'student_profiles' and column_name = 'class_code')"
+    ),
 }
 
 

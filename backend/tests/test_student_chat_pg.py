@@ -71,15 +71,15 @@ def setup(admin_auth, db_url, ids):
         yield c, db_url, ids, model
 
 
-def test_login_by_nis(setup):
+def test_login_by_email(setup):
     c, db, ids, _ = setup
-    r = c.post("/api/student/auth/login", json={"nis": db["nis"]["a"], "password": PASSWORD})
+    r = c.post("/api/student/auth/login", json={"email": db["emails"]["a"], "password": PASSWORD})
     assert r.status_code == 200, r.text
     assert r.json()["student"]["id"] == str(ids["a"])
     token = r.json()["access_token"]
     me = c.get("/api/student/me", headers={"Authorization": f"Bearer {token}"})
     assert me.status_code == 200 and me.json()["institution"]["name"] == "SLB Negeri Contoh"
-    bad = c.post("/api/student/auth/login", json={"nis": db["nis"]["inactive"], "password": PASSWORD})
+    bad = c.post("/api/student/auth/login", json={"email": db["emails"]["inactive"], "password": PASSWORD})
     assert bad.status_code == 401
 
 
@@ -120,7 +120,7 @@ def test_login_sessions_tracking_and_views_pg(setup, admin_auth):
     # Demo logs in from two different visitors (Visitor 1 logs out, Visitor 2 stays active)
     v1 = "11111111-1111-4111-8111-111111111111"
     v2 = "22222222-2222-4222-8222-222222222222"
-    r_demo = c.post("/api/student/auth/login", json={"nis": db["nis"]["a"], "password": PASSWORD, "visitor_id": v1})
+    r_demo = c.post("/api/student/auth/login", json={"email": db["emails"]["a"], "password": PASSWORD, "visitor_id": v1})
     assert r_demo.status_code == 200
     h_demo_v1 = {"Authorization": f"Bearer {r_demo.json()['access_token']}", "X-Visitor-Id": v1}
     assert c.post("/api/student/session/heartbeat", headers=h_demo_v1).status_code == 204
@@ -129,7 +129,7 @@ def test_login_sessions_tracking_and_views_pg(setup, admin_auth):
     c.cookies.clear()
     assert c.post(
         "/api/student/auth/login",
-        json={"nis": db["nis"]["a"], "password": PASSWORD},
+        json={"email": db["emails"]["a"], "password": PASSWORD},
         headers={"X-Visitor-Id": v2},
     ).status_code == 200
 
@@ -137,7 +137,7 @@ def test_login_sessions_tracking_and_views_pg(setup, admin_auth):
     v_judge = "33333333-3333-4333-8333-333333333333"
     assert c.post(
         "/api/student/auth/login",
-        json={"nis": db["nis"]["b"], "password": PASSWORD, "visitor_id": v_judge},
+        json={"email": db["emails"]["b"], "password": PASSWORD, "visitor_id": v_judge},
     ).status_code == 200
     with psycopg.connect(db["url"], autocommit=True) as conn:
         conn.execute(
@@ -148,7 +148,7 @@ def test_login_sessions_tracking_and_views_pg(setup, admin_auth):
         )
     assert c.post(
         "/api/student/auth/login",
-        json={"nis": db["nis"]["b"], "password": PASSWORD, "visitor_id": v_judge},
+        json={"email": db["emails"]["b"], "password": PASSWORD, "visitor_id": v_judge},
     ).status_code == 200
 
     with psycopg.connect(db["url"]) as conn:

@@ -244,13 +244,16 @@ Token siswa ditolak oleh dependensi staf/admin dan sebaliknya.
 
 | Method | Path | Auth | Request | Response | Error |
 |---|---|---|---|---|---|
-| POST | `/api/student/auth/login` | publik | `{nis: str 1–30, password: str 1–1024, visitor_id?: UUID}` (+ header opsional `X-Visitor-Id` / cookie otomatis `lunar_visitor_id`) | 200 `{access_token, token_type: "bearer", expires_in, refresh_token, student}` | 422, 401 INVALID_CREDENTIALS, 503 AUTH_UNAVAILABLE |
+| POST | `/api/student/auth/login` | publik | `{email: str 3–320, password: str 1–1024, visitor_id?: UUID}` (+ header opsional `X-Visitor-Id` / cookie otomatis `lunar_visitor_id`) | 200 `{access_token, token_type: "bearer", expires_in, refresh_token, student}` | 422, 401 INVALID_CREDENTIALS, 503 AUTH_UNAVAILABLE |
+| POST | `/api/student/auth/register` | publik | `{full_name: str 1–100, email: str 3–320, password: str 8–1024, visitor_id?: UUID}` (ADR-056) | 201 sama dengan login | 422, 409 CONFLICT, 503 AUTH_UNAVAILABLE |
+| POST | `/api/student/auth/forgot-password` | publik | `{email: str 3–320}` (ADR-056) | 204 (anti-enumerasi: kirim email pemulihan via Supabase bila profil aktif) | 422, 503 AUTH_UNAVAILABLE |
 | POST | `/api/student/auth/refresh` | publik | `{refresh_token: str 1–4096}` | 200 sama dengan login | 422, 401 INVALID_CREDENTIALS, 503 AUTH_UNAVAILABLE |
 | POST | `/api/student/auth/logout` | siswa | | 204 (mencatat `logout_at` sesi Demo/Judge di `user_login_sessions`, best-effort; ADR-055) | 401, 403, 503 |
 | POST | `/api/student/session/heartbeat` | siswa | | 204 (memperbarui `last_activity_at` sesi Demo/Judge, best-effort; ADR-055) | 401, 403, 503 |
 | GET | `/api/student/me` | siswa | | 200 `student` | 401, 403, 503 |
+| PATCH | `/api/student/me` | siswa | `{full_name?: str 1–100, grade?: int 1–12, class_code?: str\|null}` (ADR-056) | 200 `student` | 401, 403, 422, 503 |
 
-`student = {id, nis, full_name, class_name, grade, avatar_url, institution: {id, name}}`. Semua response di atas memakai `Cache-Control: no-store`. Setiap kegagalan kredensial memakai satu pesan generik.
+`student = {id, email, nis, full_name, class_name, grade, class_code, avatar_url, institution: {id, name}|null}`. Semua response di atas memakai `Cache-Control: no-store`. Setiap kegagalan kredensial memakai satu pesan generik.
 
 ### 4.4 Chat (semua `require_student`)
 

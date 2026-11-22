@@ -77,13 +77,14 @@ class LogFilters:
 @dataclass(frozen=True)
 class AccountUsageItem:
     student_id: UUID
-    nis: str
+    nis: str | None
     full_name: str
     active: bool
     last_sign_in_at: datetime | None
     login_count: int
     token_refreshed_count: int
     total_events: int
+    email: str | None = None
 
 
 @dataclass(frozen=True)
@@ -252,19 +253,19 @@ class PostgresAdminRepository:
         async with self._conn.cursor() as cur:
             if nis_list is not None:
                 await cur.execute(
-                    "select s.id, s.nis, s.full_name, s.active, u.last_sign_in_at"
+                    "select s.id, s.nis, s.full_name, s.active, u.last_sign_in_at, u.email"
                     " from student_profiles s"
                     " left join auth.users u on u.id = s.id"
-                    " where s.nis = any(%s)"
-                    " order by s.nis asc, s.id asc",
-                    (nis_list,),
+                    " where s.nis = any(%s) or lower(u.email) = any(%s)"
+                    " order by coalesce(s.nis, u.email, '') asc, s.id asc",
+                    (nis_list, [v.lower() for v in nis_list]),
                 )
             else:
                 await cur.execute(
-                    "select s.id, s.nis, s.full_name, s.active, u.last_sign_in_at"
+                    "select s.id, s.nis, s.full_name, s.active, u.last_sign_in_at, u.email"
                     " from student_profiles s"
                     " left join auth.users u on u.id = s.id"
-                    " order by s.nis asc, s.id asc"
+                    " order by coalesce(s.nis, u.email, '') asc, s.id asc"
                 )
             student_rows = await cur.fetchall()
 
@@ -344,7 +345,7 @@ class PostgresAdminRepository:
             daily_rows = await cur.fetchall()
 
         accounts: list[AccountUsageItem] = []
-        for sid, nis, full_name, active, last_sign_in_at in student_rows:
+        for sid, nis, full_name, active, last_sign_in_at, email in student_rows:
             logins, refreshes = counts_by_actor.get(str(sid), (0, 0))
             accounts.append(
                 AccountUsageItem(
@@ -356,6 +357,7 @@ class PostgresAdminRepository:
                     login_count=logins,
                     token_refreshed_count=refreshes,
                     total_events=logins + refreshes,
+                    email=email,
                 )
             )
 

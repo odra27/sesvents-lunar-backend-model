@@ -371,7 +371,7 @@ def test_account_usage_defaults_and_shape(api, repo, monkeypatch):
     assert b["days"] == 30
     assert len(b["accounts"]) == 2
     assert set(b["accounts"][0]) == {
-        "student_id", "nis", "full_name", "active", "last_sign_in_at",
+        "student_id", "email", "nis", "full_name", "active", "last_sign_in_at",
         "login_count", "token_refreshed_count", "total_events"
     }
     # 12:00 UTC converted to Asia/Jakarta (+07:00) → 19:00:00+07:00

@@ -24,30 +24,94 @@ SISWA_2 = UUID("00000000-0000-0000-0000-0000000006a2")
 SISWA_INACTIVE = UUID("00000000-0000-0000-0000-0000000006a3")
 
 
-def student(sid: UUID, *, nis: str, full_name="Nadia Putri", active=True, account_type=None) -> StudentProfile:
-    return StudentProfile(id=sid, institution_id=SCHOOL, institution_name="SLB Negeri Contoh", nis=nis,
-                          full_name=full_name, class_name="5A", grade=5, avatar_url=None, active=active,
-                          account_type=account_type)
+def student(
+    sid: UUID,
+    *,
+    nis: str | None = None,
+    email: str | None = None,
+    full_name: str = "Nadia Putri",
+    active: bool = True,
+    account_type: str | None = None,
+    grade: int | None = 5,
+    class_code: str | None = None,
+    institution_id: UUID | None = SCHOOL,
+    institution_name: str | None = "SLB Negeri Contoh",
+) -> StudentProfile:
+    return StudentProfile(
+        id=sid,
+        institution_id=institution_id,
+        institution_name=institution_name,
+        nis=nis,
+        full_name=full_name,
+        class_name="5A" if institution_id else None,
+        grade=grade,
+        avatar_url=None,
+        active=active,
+        account_type=account_type,
+        email=email,
+        class_code=class_code,
+    )
 
 
 def default_students() -> dict[UUID, tuple[str | None, StudentProfile]]:
     return {
-        SISWA: ("0012345678@siswa.test", student(SISWA, nis="0012345678")),
-        SISWA_2: ("0099999999@siswa.test", student(SISWA_2, nis="0099999999", full_name="Raka")),
-        SISWA_INACTIVE: ("0011111111@siswa.test", student(SISWA_INACTIVE, nis="0011111111", active=False)),
+        SISWA: (
+            "nadia@siswa.test",
+            student(SISWA, nis="0012345678", email="nadia@siswa.test"),
+        ),
+        SISWA_2: (
+            "raka@siswa.test",
+            student(SISWA_2, nis="0099999999", email="raka@siswa.test", full_name="Raka"),
+        ),
+        SISWA_INACTIVE: (
+            "inactive@siswa.test",
+            student(SISWA_INACTIVE, nis="0011111111", email="inactive@siswa.test", active=False),
+        ),
     }
 
 
 class FakeStudentRepo:
     def __init__(self, rows=None) -> None:
         self.rows = rows if rows is not None else default_students()
+        self.fail_create = False
 
     async def get_profile(self, student_id: UUID) -> StudentProfile | None:
         row = self.rows.get(student_id)
         return row[1] if row else None
 
-    async def find_login_targets(self, nis: str) -> list[StudentLoginTarget]:
-        return [StudentLoginTarget(email=e, profile=p) for e, p in self.rows.values() if p.nis == nis][:2]
+    async def find_login_targets_by_email(self, email: str) -> list[StudentLoginTarget]:
+        target = email.strip().lower()
+        return [
+            StudentLoginTarget(email=e, profile=p)
+            for e, p in self.rows.values()
+            if e and e.lower() == target
+        ][:2]
+
+    async def create_b2c_profile(self, *, user_id: UUID, full_name: str) -> StudentProfile:
+        if self.fail_create:
+            raise RuntimeError("db insert failed")
+        email = getattr(self, "_last_created_email", None)
+        p = student(
+            user_id,
+            nis=None,
+            email=email,
+            full_name=full_name,
+            grade=None,
+            class_code=None,
+            institution_id=None,
+            institution_name=None,
+        )
+        self.rows[user_id] = (email, p)
+        return p
+
+    async def update_profile(self, student_id: UUID, changes: dict) -> StudentProfile | None:
+        row = self.rows.get(student_id)
+        if row is None:
+            return None
+        email, p = row
+        updated = StudentProfile(**{**vars(p), **changes})
+        self.rows[student_id] = (email, updated)
+        return updated
 
 
 class FakeChatRepo:
@@ -295,12 +359,46 @@ class FakeChatModel:
         return None
 
 
+class FakeStudentAuthAdmin:
+    """In-memory stand-in for SupabaseAdminClient during student self-registration tests (ADR-056)."""
+
+    def __init__(self, gotrue: FakeGoTrue, db: FakeStudentDb) -> None:
+        self.gotrue = gotrue
+        self.db = db
+        self.created: list[UUID] = []
+        self.deleted: list[UUID] = []
+        self.weak_password = False
+
+    async def create_user(self, *, email: str, password: str, role: str) -> UUID:
+        from app.errors import Conflict
+        from app.provisioning.supabase_admin import WeakPassword
+
+        if self.weak_password:
+            raise WeakPassword("weak")
+        if email.lower() in {k.lower() for k in self.gotrue.accounts}:
+            raise Conflict("exists")
+        uid = uuid.uuid4()
+        self.gotrue.accounts[email.lower()] = (password, uid, role)
+        self.db.students._last_created_email = email.lower()
+        self.created.append(uid)
+        return uid
+
+    async def delete_user(self, user_id: UUID) -> None:
+        self.deleted.append(user_id)
+        for k, v in list(self.gotrue.accounts.items()):
+            if v[1] == user_id:
+                del self.gotrue.accounts[k]
+
+    async def aclose(self) -> None:
+        return None
+
+
 def student_gotrue(auth: AdminAuth) -> FakeGoTrue:
     g = FakeGoTrue(auth)
     g.accounts = {
-        "0012345678@siswa.test": (PASSWORD, SISWA, "siswa"),
-        "0099999999@siswa.test": (PASSWORD, SISWA_2, "siswa"),
-        "0011111111@siswa.test": (PASSWORD, SISWA_INACTIVE, "siswa"),
+        "nadia@siswa.test": (PASSWORD, SISWA, "siswa"),
+        "raka@siswa.test": (PASSWORD, SISWA_2, "siswa"),
+        "inactive@siswa.test": (PASSWORD, SISWA_INACTIVE, "siswa"),
     }
     return g
 
@@ -309,14 +407,21 @@ def _not_configured():
     raise RuntimeError("not configured in this test")
 
 
-def student_client(auth: AdminAuth, open_db, *, auth_client_factory=_not_configured, chat_model=None) -> TestClient:
+def student_client(
+    auth: AdminAuth,
+    open_db,
+    *,
+    auth_client_factory=_not_configured,
+    auth_admin_factory=_not_configured,
+    chat_model=None,
+) -> TestClient:
     app = create_app(
         modeling_factory=lambda: LibraryModelingClient(FakePredictor()),
         open_db=open_db,
         jwt_verifier_factory=auth.verifier,
         storage_factory=_not_configured,
         auth_client_factory=auth_client_factory,
-        auth_admin_factory=_not_configured,
+        auth_admin_factory=auth_admin_factory,
         chat_model_factory=(
             lambda: chat_model) if chat_model is not None else _not_configured,
     )

@@ -93,6 +93,17 @@ class SupabaseAuthClient:
             raise AuthUnavailable(_UNAVAILABLE) from None
         return _grant_from(r)
 
+    async def recover_password(self, email: str) -> None:
+        """`POST /recover` (ADR-056). Triggers Supabase password recovery email.
+        5xx / network errors map to AuthUnavailable; 200 / 4xx (e.g. rate limit or unconfirmed)
+        are absorbed so the caller always returns 204 without leaking account existence."""
+        try:
+            r = await self._client.post("/recover", json={"email": email})
+        except httpx.HTTPError:
+            raise AuthUnavailable(_UNAVAILABLE) from None
+        if r.status_code >= 500:
+            raise AuthUnavailable(_UNAVAILABLE)
+
     async def aclose(self) -> None:
         await self._client.aclose()
 

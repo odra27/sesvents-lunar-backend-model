@@ -558,7 +558,8 @@ class AccountUsageQuery(BaseModel):
 
 class AccountUsageItemOut(BaseModel):
     student_id: UUID
-    nis: str
+    email: str | None = None
+    nis: str | None = None
     full_name: str
     active: bool
     last_sign_in_at: datetime | None
@@ -612,6 +613,7 @@ async def get_account_usage(
     accounts = [
         AccountUsageItemOut(
             student_id=a.student_id,
+            email=a.email,
             nis=a.nis,
             full_name=a.full_name,
             active=a.active,

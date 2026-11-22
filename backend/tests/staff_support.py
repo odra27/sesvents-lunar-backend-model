@@ -141,6 +141,8 @@ class FakeGoTrue:
             return httpx.Response(self.status, json={"error": "forced"})
         if self.body is not None:
             return httpx.Response(200, content=self.body)
+        if request.url.path.endswith("/recover"):
+            return httpx.Response(200, json={})
         data = json.loads(request.content)
         if request.url.params.get("grant_type") == "refresh_token":
             # refresh-<email> → that account (test-only token format); anything else is revoked.

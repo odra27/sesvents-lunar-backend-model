@@ -2610,3 +2610,35 @@ In addition to reading Supabase Auth audit logs (ADR-054), the project owner nee
 
 ## Migration
 `Database/migrations/20261120000000_adr055_user_login_sessions.sql` and `Database/migrations/20261120010000_adr055_visitor_id.sql` — additive and idempotent. Registered in `backend/scripts/apply_migrations.py`.
+
+---
+
+# ADR-056 — B2C Student Email Login, Self-Registration & Profile Completion
+
+**Status:** Accepted (requested and approved by the project owner, 2026-11-22)
+**Supersedes (partially):** ADR-051 D2 ("school-registered only, no self sign-up, login by NIS") and ADR-052 D1 ("no self sign-up").
+**Relates to:** ADR-039 (JWT verification), ADR-047 D4/D5 (Supabase Admin provisioning & login proxy), ADR-051 D2, ADR-052, ADR-054, ADR-055.
+
+## Context
+LUNAR transitions to a B2C onboarding flow where students/parents can register directly with email + password (without needing an NIS from a school), choose their grade (SD 4/5/6), and optionally enter a school class code (`class_code`, e.g. `LNR-5A21`) so B2B school tracking remains possible without blocking general users.
+
+## Decisions
+1. **Login by Email + Password (`POST /api/student/auth/login`).**
+   * Request body (`extra="forbid"`): `{email, password, visitor_id?}`. `nis` is removed from the login request contract.
+   * Lookup is case-insensitive against `auth.users.email` joined with `student_profiles` (`active = true`).
+   * Same generic `401 INVALID_CREDENTIALS` and `503 AUTH_UNAVAILABLE` error rules as ADR-047 D5 / ADR-051 D2.
+2. **Self-Registration (`POST /api/student/auth/register`).**
+   * Request body (`extra="forbid"`): `{full_name (1..100), email, password (min 8), visitor_id?}`.
+   * Uses `SUPABASE_SERVICE_ROLE_KEY` via `SupabaseAdminClient` (same server-side provisioning pattern as ADR-047 D4) to create a Supabase Auth user with `app_metadata.role = "siswa"`, inserts a B2C `student_profiles` row (rolling back the Auth user if DB insert fails), signs in via password grant, and returns `201` with `StudentLoginResponse` (`Cache-Control: no-store`).
+   * Duplicate email → `409 CONFLICT`; weak password → `422 VALIDATION_ERROR`.
+3. **Profile Completion (`PATCH /api/student/me`) & Forgot Password (`POST /api/student/auth/forgot-password`).**
+   * `PATCH /api/student/me`: guarded by `require_student`. Request body (`extra="forbid"`): optional `full_name`, `grade` (`1..12`), `class_code` (`<= 30`, blank trimmed to `NULL` for "Lewati kode kelas"). At least one field required.
+   * `POST /api/student/auth/forgot-password`: accepts `{email}` (`extra="forbid"`). Calls Supabase Auth `POST /auth/v1/recover` only when an active student profile matches, and always returns `204 No Content` (`Cache-Control: no-store`) to prevent account enumeration.
+4. **Schema & `StudentOut` changes.**
+   * `student_profiles.nis` and `student_profiles.institution_id` become nullable (`DROP NOT NULL`).
+   * Added nullable `student_profiles.class_code varchar(30)`.
+   * `StudentOut` includes `email` and `class_code`; `nis` and `institution` become nullable.
+   * Demo & Judge tracking (ADR-055) supports `DEMO_STUDENT_EMAIL` / `JUDGE_STUDENT_EMAIL` in addition to `student_profiles.account_type` (e.g. `demo@lunar.app`, `juri@lunar.app`).
+
+## Migration
+`Database/migrations/20261122000000_adr056_b2c_email_login_register.sql` — non-destructive & idempotent. Registered in `backend/scripts/apply_migrations.py`.

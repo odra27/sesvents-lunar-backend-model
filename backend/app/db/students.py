@@ -1,36 +1,48 @@
-"""Student profile data access (ADR-051 D2). psycopg 3, parameterized SQL, read-only.
+"""Student profile data access (ADR-051 D2, ADR-056). psycopg 3, parameterized SQL.
 
-* `get_profile` loads the caller's own profile joined with its institution.
-* `find_login_targets` resolves a NIS (exact match after trimming) to student accounts
-  plus the Supabase Auth email used for the password grant. The caller treats anything
-  other than exactly one match as a credential failure.
+* `get_profile` loads the caller's own profile (with optional institution and auth.users email).
+* `find_login_targets_by_email` resolves a lowercased email to student accounts plus the
+  Supabase Auth email used for the password grant. The caller treats anything other than
+  exactly one active match as a credential failure.
+* `create_b2c_profile` inserts a self-registered B2C student profile (no NIS or institution
+  required; grade and class_code can be filled in Step 2 via `update_profile`).
+* `update_profile` updates `full_name`, `grade`, and/or `class_code` for the caller.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 from psycopg import AsyncConnection
 
 _COLS = (
-    "s.id, s.institution_id, i.name, s.nis, s.full_name, s.class_name, s.grade, s.avatar_url, s.active, s.account_type"
+    "s.id, s.institution_id, i.name, s.nis, s.full_name, s.class_name, s.grade,"
+    " s.avatar_url, s.active, s.account_type, u.email, s.class_code"
 )
-_FROM = "from student_profiles s join institutions i on i.id = s.institution_id"
+_FROM = (
+    "from student_profiles s"
+    " left join institutions i on i.id = s.institution_id"
+    " left join auth.users u on u.id = s.id"
+)
+
+WRITABLE_PROFILE_FIELDS = ("full_name", "grade", "class_code")
 
 
 @dataclass(frozen=True)
 class StudentProfile:
     id: UUID
-    institution_id: UUID
-    institution_name: str
-    nis: str
+    institution_id: UUID | None
+    institution_name: str | None
+    nis: str | None
     full_name: str
     class_name: str | None
     grade: int | None
     avatar_url: str | None
     active: bool
     account_type: str | None = None
+    email: str | None = None
+    class_code: str | None = None
 
 
 @dataclass(frozen=True)
@@ -41,7 +53,9 @@ class StudentLoginTarget:
 
 class StudentRepository(Protocol):
     async def get_profile(self, student_id: UUID) -> StudentProfile | None: ...
-    async def find_login_targets(self, nis: str) -> list[StudentLoginTarget]: ...
+    async def find_login_targets_by_email(self, email: str) -> list[StudentLoginTarget]: ...
+    async def create_b2c_profile(self, *, user_id: UUID, full_name: str) -> StudentProfile: ...
+    async def update_profile(self, student_id: UUID, changes: dict[str, Any]) -> StudentProfile | None: ...
 
 
 class PostgresStudentRepository:
@@ -54,11 +68,36 @@ class PostgresStudentRepository:
             row = await cur.fetchone()
         return StudentProfile(*row) if row else None
 
-    async def find_login_targets(self, nis: str) -> list[StudentLoginTarget]:
+    async def find_login_targets_by_email(self, email: str) -> list[StudentLoginTarget]:
         async with self._conn.cursor() as cur:
             await cur.execute(
-                f"select u.email, {_COLS} {_FROM} join auth.users u on u.id = s.id where s.nis = %s limit 2",
-                (nis,),
+                f"select u.email, {_COLS} {_FROM} where lower(u.email) = lower(%s) limit 2",
+                (email,),
             )
             rows = await cur.fetchall()
         return [StudentLoginTarget(email=r[0], profile=StudentProfile(*r[1:])) for r in rows]
+
+    async def create_b2c_profile(self, *, user_id: UUID, full_name: str) -> StudentProfile:
+        async with self._conn.cursor() as cur:
+            await cur.execute(
+                "insert into student_profiles (id, full_name) values (%s, %s)",
+                (user_id, full_name),
+            )
+        profile = await self.get_profile(user_id)
+        if profile is None:
+            raise RuntimeError("inserted student profile missing")
+        return profile
+
+    async def update_profile(self, student_id: UUID, changes: dict[str, Any]) -> StudentProfile | None:
+        cols = [c for c in WRITABLE_PROFILE_FIELDS if c in changes]
+        if len(cols) != len(changes) or not cols:
+            raise ValueError("only writable student profile fields may be updated")
+        assignments = ", ".join(f"{c} = %s" for c in cols)
+        async with self._conn.cursor() as cur:
+            await cur.execute(
+                f"update student_profiles set {assignments} where id = %s",
+                (*[changes[c] for c in cols], student_id),
+            )
+            if cur.rowcount != 1:
+                return None
+        return await self.get_profile(student_id)
