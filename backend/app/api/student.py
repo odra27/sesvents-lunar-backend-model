@@ -77,28 +77,14 @@ _DEFAULT_INSTITUTION_NAME = "LUNAR"
 class StudentLoginRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    email: StrictStr | None = Field(default=None, min_length=1, max_length=320)
-    nis: StrictStr | None = Field(default=None, min_length=1, max_length=320)
+    email: StrictStr = Field(min_length=3, max_length=320)
     password: StrictStr = Field(min_length=1, max_length=1024)
     visitor_id: UUID | None = None
 
-    @model_validator(mode="after")
-    def _check_identifier(self) -> "StudentLoginRequest":
-        raw = self.email if self.email is not None else self.nis
-        if raw is None:
-            raise ValueError("email or nis is required")
-        cleaned = raw.strip()
-        if not cleaned:
-            raise ValueError("identifier must not be blank")
-        if "@" in cleaned:
-            self.email = _normalize_email(cleaned)
-            self.nis = None
-        else:
-            if len(cleaned) > 30:
-                raise ValueError("nis must be at most 30 characters")
-            self.nis = cleaned
-            self.email = None
-        return self
+    @field_validator("email")
+    @classmethod
+    def _email(cls, v: str) -> str:
+        return _normalize_email(v)
 
 
 class StudentRegisterRequest(BaseModel):
@@ -235,10 +221,7 @@ async def student_login(payload: StudentLoginRequest, request: Request, response
     async with request.app.state.open_db() as db:
         if db.students is None:
             raise RuntimeError("student repository missing")
-        if payload.email is not None:
-            targets = await db.students.find_login_targets_by_email(payload.email)
-        else:
-            targets = await db.students.find_login_targets(payload.nis or "")
+        targets = await db.students.find_login_targets_by_email(payload.email)
     if len(targets) != 1:
         raise InvalidCredentials(_INVALID)
     target = targets[0]

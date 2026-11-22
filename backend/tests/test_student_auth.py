@@ -117,7 +117,8 @@ def test_missing_auth_config_is_503(admin_auth, db):
     {"password": PASSWORD},
     {"email": "  ", "password": PASSWORD},
     {"email": "bad@email", "password": PASSWORD},
-    {"nis": "x" * 31, "password": PASSWORD},
+    {"email": "bukan-email", "password": PASSWORD},
+    {"nis": "0012345678", "password": PASSWORD},  # Email-only login (ADR-056)
     {"email": 12345678, "password": PASSWORD},
     {"email": "nadia@siswa.test", "password": ""},
     {"email": "nadia@siswa.test", "password": PASSWORD, "role": "admin"},
@@ -126,14 +127,6 @@ def test_validation(client, gotrue, payload):
     r = client.post("/api/student/auth/login", json=payload)
     assert r.status_code == 422 and r.json()["error"]["code"] == "VALIDATION_ERROR"
     assert gotrue.requests == []
-
-
-def test_login_backward_compatible_with_nis_field(client):
-    """Existing Frontend sends `{nis, password}`; accepts both NIS value and email inside `nis`."""
-    r_nis = client.post("/api/student/auth/login", json={"nis": "0012345678", "password": PASSWORD})
-    assert r_nis.status_code == 200
-    r_email_in_nis = client.post("/api/student/auth/login", json={"nis": "nadia@siswa.test", "password": PASSWORD})
-    assert r_email_in_nis.status_code == 200
 
 
 def test_password_never_echoed_or_logged(client, caplog):
