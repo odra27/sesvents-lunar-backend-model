@@ -253,19 +253,19 @@ class PostgresAdminRepository:
         async with self._conn.cursor() as cur:
             if nis_list is not None:
                 await cur.execute(
-                    "select s.id, s.nis, s.full_name, s.active, u.last_sign_in_at, u.email"
+                    "select s.id, s.full_name, s.active, u.last_sign_in_at, u.email"
                     " from student_profiles s"
                     " left join auth.users u on u.id = s.id"
-                    " where s.nis = any(%s) or lower(u.email) = any(%s)"
-                    " order by coalesce(s.nis, u.email, '') asc, s.id asc",
-                    (nis_list, [v.lower() for v in nis_list]),
+                    " where lower(u.email) = any(%s)"
+                    " order by coalesce(u.email, '') asc, s.id asc",
+                    ([v.lower() for v in nis_list],),
                 )
             else:
                 await cur.execute(
-                    "select s.id, s.nis, s.full_name, s.active, u.last_sign_in_at, u.email"
+                    "select s.id, s.full_name, s.active, u.last_sign_in_at, u.email"
                     " from student_profiles s"
                     " left join auth.users u on u.id = s.id"
-                    " order by coalesce(s.nis, u.email, '') asc, s.id asc"
+                    " order by coalesce(u.email, '') asc, s.id asc"
                 )
             student_rows = await cur.fetchall()
 
@@ -345,12 +345,12 @@ class PostgresAdminRepository:
             daily_rows = await cur.fetchall()
 
         accounts: list[AccountUsageItem] = []
-        for sid, nis, full_name, active, last_sign_in_at, email in student_rows:
+        for sid, full_name, active, last_sign_in_at, email in student_rows:
             logins, refreshes = counts_by_actor.get(str(sid), (0, 0))
             accounts.append(
                 AccountUsageItem(
                     student_id=sid,
-                    nis=nis,
+                    nis=None,
                     full_name=full_name,
                     active=bool(active),
                     last_sign_in_at=last_sign_in_at,

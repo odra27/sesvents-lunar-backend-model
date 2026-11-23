@@ -1,9 +1,9 @@
 """Operator CLI to provision a student account in Supabase Auth and `student_profiles`.
 
-Examples (ADR-051 D2, ADR-056, ADR-057):
+Examples (ADR-051 D2, ADR-056, ADR-057, ADR-058):
     cd backend
-    .venv/bin/python scripts/create_student.py --email demo.lunar@gmail.com --name "Akun Demo" --grade 5 --account-type demo
-    .venv/bin/python scripts/create_student.py --email juri.lunar@gmail.com --name "Akun Juri" --grade 5 --account-type judge
+    .venv/bin/python scripts/create_student.py --email demo.lunar@gmail.com --name "Akun Demo" --phone 081234567890 --account-type demo
+    .venv/bin/python scripts/create_student.py --email juri.lunar@gmail.com --name "Akun Juri" --phone 081234567891 --account-type judge
 
 Password is read securely via getpass prompt (never echoed) or `STUDENT_PASSWORD` env var.
 """
@@ -13,6 +13,7 @@ import argparse
 import asyncio
 import getpass
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -24,24 +25,20 @@ from app.errors import Conflict  # noqa: E402
 from app.provisioning.supabase_admin import SupabaseAdminClient, WeakPassword  # noqa: E402
 from scripts.apply_migrations import _load_env_file  # noqa: E402
 
-EMAIL_DOMAIN = "siswa.isyara.local"
+_PHONE_RE = re.compile(r"^0[0-9]{7,14}$")
 
 
 def parse() -> argparse.Namespace:
     """Parse CLI arguments for student account provisioning."""
     p = argparse.ArgumentParser(description="Daftarkan akun siswa (Email + password).")
-    p.add_argument("--email", help="Email login siswa (mis. demo.lunar@gmail.com). Wajib jika --nis tidak diisi.")
-    p.add_argument("--nis", help="Opsional: NIS siswa (legacy / jalur sekolah).")
-    p.add_argument("--name", required=True, help="Nama panggilan / lengkap siswa.")
-    p.add_argument("--class", dest="class_name")
-    p.add_argument("--grade", type=int, choices=range(1, 13), metavar="1-12")
-    p.add_argument("--class-code", dest="class_code", help="Opsional: kode kelas dari sekolah (mis. LNR-5A21).")
-    p.add_argument("--school", help="Opsional: nama sekolah (institutions.name).")
+    p.add_argument("--email", required=True, help="Email login siswa (mis. demo.lunar@gmail.com).")
+    p.add_argument("--name", required=True, help="Nama lengkap siswa.")
+    p.add_argument("--phone", required=True, help="Nomor telepon siswa (awalan 0, 8-15 digit, tanpa spasi/strip).")
     p.add_argument(
         "--account-type",
-        choices=["demo", "judge"],
-        default=None,
-        help="Opsional: tandai akun khusus untuk login activity tracking ('demo' atau 'judge', ADR-055).",
+        choices=["demo", "judge", "student"],
+        default="student",
+        help="Tipe akun untuk tracking ('demo', 'judge', atau 'student'; default: 'student').",
     )
     return p.parse_args()
 
@@ -50,13 +47,13 @@ async def main() -> int:
     """Create the Supabase Auth user and matching `student_profiles` row (with rollback on DB error)."""
     _load_env_file()
     a = parse()
-    nis = a.nis.strip() if a.nis else None
-    email = a.email.strip().lower() if a.email else (f"{nis.lower()}@{EMAIL_DOMAIN}" if nis else None)
+    email = a.email.strip().lower()
     if not email or "@" not in email:
-        print("Wajib mengisi --email yang valid (atau --nis).", file=sys.stderr)
+        print("Wajib mengisi --email yang valid.", file=sys.stderr)
         return 2
-    if nis is not None and (not nis or len(nis) > 30):
-        print("NIS maksimal 30 karakter.", file=sys.stderr)
+    phone = a.phone.strip()
+    if not _PHONE_RE.match(phone):
+        print("Nomor telepon harus diawali 0 dan berisi 8-15 digit angka saja.", file=sys.stderr)
         return 2
     password = os.environ.get("STUDENT_PASSWORD") or getpass.getpass("Password siswa (min. 8 karakter): ")
     if len(password) < 8:
@@ -72,15 +69,6 @@ async def main() -> int:
         if conn.execute("select to_regclass('student_profiles')").fetchone()[0] is None:
             print("Tabel student_profiles belum ada. Jalankan migration dulu.", file=sys.stderr)
             return 2
-        if nis is not None and conn.execute("select 1 from student_profiles where nis = %s", (nis,)).fetchone():
-            print(f"NIS {nis} sudah terdaftar.", file=sys.stderr)
-            return 1
-        school_id = None
-        if a.school:
-            row = conn.execute("select id from institutions where name = %s limit 1", (a.school,)).fetchone()
-            school_id = row[0] if row else conn.execute(
-                "insert into institutions (name) values (%s) returning id", (a.school,)
-            ).fetchone()[0]
 
         admin = SupabaseAdminClient.from_env()
         try:
@@ -94,10 +82,8 @@ async def main() -> int:
                 return 1
             try:
                 conn.execute(
-                    "insert into student_profiles"
-                    " (id, institution_id, nis, full_name, class_name, grade, class_code, account_type)"
-                    " values (%s, %s, %s, %s, %s, %s, %s, %s)",
-                    (user_id, school_id, nis, a.name.strip(), a.class_name, a.grade, a.class_code, a.account_type),
+                    "insert into student_profiles (id, full_name, phone, account_type) values (%s, %s, %s, %s)",
+                    (user_id, a.name.strip(), phone, a.account_type),
                 )
             except Exception:
                 await admin.delete_user(user_id)  # rollback: jangan tinggalkan akun tanpa profil
@@ -105,8 +91,7 @@ async def main() -> int:
         finally:
             await admin.aclose()
 
-    tag = f" [account_type={a.account_type}]" if a.account_type else ""
-    print(f"OK: siswa {a.name} ({email}){tag} terdaftar.")
+    print(f"OK: siswa {a.name} ({email}) [account_type={a.account_type}] terdaftar.")
     return 0
 
 

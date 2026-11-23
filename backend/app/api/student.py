@@ -124,23 +124,16 @@ class StudentProfilePatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     full_name: StrictStr | None = Field(default=None, min_length=1, max_length=100)
-    grade: StrictInt | None = Field(default=None, ge=1, le=12)
-    class_code: StrictStr | None = Field(default=None, max_length=30)
     phone: StrictStr | None = Field(default=None, min_length=8, max_length=15)
 
     @model_validator(mode="after")
     def _check_fields(self) -> "StudentProfilePatch":
         if not self.model_fields_set:
-            raise ValueError("at least one of full_name, grade, class_code, phone is required")
+            raise ValueError("at least one of full_name, phone is required")
         if "full_name" in self.model_fields_set:
             if self.full_name is None or not self.full_name.strip():
                 raise ValueError("full_name must not be null or blank")
             self.full_name = " ".join(self.full_name.split())
-        if "grade" in self.model_fields_set and self.grade is None:
-            raise ValueError("grade must not be null")
-        if "class_code" in self.model_fields_set and self.class_code is not None:
-            cleaned = self.class_code.strip()
-            self.class_code = cleaned if cleaned else None
         if "phone" in self.model_fields_set:
             if self.phone is None:
                 raise ValueError("phone must not be null")
@@ -459,7 +452,7 @@ async def update_student_me(
     response: Response,
     principal: StudentPrincipal = Depends(require_student),
 ) -> StudentOut:
-    """Complete or update own student profile (ADR-056: grade SD 4/5/6, optional class_code, full_name)."""
+    """Update own student profile (`full_name`, `phone`)."""
     async with request.app.state.open_db() as db:
         if db.students is None:
             raise RuntimeError("student repository missing")

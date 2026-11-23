@@ -17,16 +17,33 @@ from uuid import UUID
 from psycopg import AsyncConnection
 
 _COLS = (
-    "s.id, s.institution_id, i.name, s.nis, s.full_name, s.class_name, s.grade,"
-    " s.avatar_url, s.active, s.account_type, u.email, s.class_code, s.phone"
+    "s.id, s.full_name, s.avatar_url, s.active, s.account_type, u.email, s.phone"
 )
 _FROM = (
     "from student_profiles s"
-    " left join institutions i on i.id = s.institution_id"
     " left join auth.users u on u.id = s.id"
 )
 
-WRITABLE_PROFILE_FIELDS = ("full_name", "grade", "class_code", "phone")
+WRITABLE_PROFILE_FIELDS = ("full_name", "phone")
+
+
+def _row_to_profile(row: tuple) -> "StudentProfile":
+    sid, full_name, avatar_url, active, account_type, email, phone = row
+    return StudentProfile(
+        id=sid,
+        institution_id=None,
+        institution_name=None,
+        nis=None,
+        full_name=full_name,
+        class_name=None,
+        grade=None,
+        avatar_url=avatar_url,
+        active=active,
+        account_type=account_type,
+        email=email,
+        class_code=None,
+        phone=phone,
+    )
 
 
 @dataclass(frozen=True)
@@ -54,7 +71,6 @@ class StudentLoginTarget:
 
 class StudentRepository(Protocol):
     async def get_profile(self, student_id: UUID) -> StudentProfile | None: ...
-    async def find_login_targets(self, nis: str) -> list[StudentLoginTarget]: ...
     async def find_login_targets_by_email(self, email: str) -> list[StudentLoginTarget]: ...
     async def create_b2c_profile(self, *, user_id: UUID, full_name: str, phone: str) -> StudentProfile: ...
     async def update_profile(self, student_id: UUID, changes: dict[str, Any]) -> StudentProfile | None: ...
@@ -67,21 +83,11 @@ class PostgresStudentRepository:
         self._conn = conn
 
     async def get_profile(self, student_id: UUID) -> StudentProfile | None:
-        """Fetch a single student profile joined with optional institution and Auth email."""
+        """Fetch a single student profile joined with its Auth email."""
         async with self._conn.cursor() as cur:
             await cur.execute(f"select {_COLS} {_FROM} where s.id = %s", (student_id,))
             row = await cur.fetchone()
-        return StudentProfile(*row) if row else None
-
-    async def find_login_targets(self, nis: str) -> list[StudentLoginTarget]:
-        """Resolve up to two student accounts matching an exact legacy NIS."""
-        async with self._conn.cursor() as cur:
-            await cur.execute(
-                f"select u.email, {_COLS} {_FROM} where s.nis = %s limit 2",
-                (nis,),
-            )
-            rows = await cur.fetchall()
-        return [StudentLoginTarget(email=r[0], profile=StudentProfile(*r[1:])) for r in rows]
+        return _row_to_profile(row) if row else None
 
     async def find_login_targets_by_email(self, email: str) -> list[StudentLoginTarget]:
         """Resolve up to two student accounts matching a case-insensitive Auth email."""
@@ -91,7 +97,7 @@ class PostgresStudentRepository:
                 (email,),
             )
             rows = await cur.fetchall()
-        return [StudentLoginTarget(email=r[0], profile=StudentProfile(*r[1:])) for r in rows]
+        return [StudentLoginTarget(email=r[0], profile=_row_to_profile(r[1:])) for r in rows]
 
     async def create_b2c_profile(self, *, user_id: UUID, full_name: str, phone: str) -> StudentProfile:
         """Insert a new self-registered B2C student profile tagged as account_type='student'."""

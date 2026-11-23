@@ -160,20 +160,16 @@ def test_register_b2c_and_complete_profile(client):
     assert data["student"]["grade"] is None
     assert data["student"]["class_code"] is None
 
-    # Step 2: Lengkapi profil (pilih SD 5 + kode kelas opsional + ubah nomor telepon)
+    # Update profile (full_name + phone)
     h = {"Authorization": f"Bearer {data['access_token']}"}
     p = client.patch(
         "/api/student/me",
         headers=h,
-        json={"grade": 5, "class_code": " LNR-5A21 ", "phone": "081299990000"},
+        json={"full_name": "  Nadia P. ", "phone": "081299990000"},
     )
     assert p.status_code == 200, p.text
-    assert p.json()["grade"] == 5 and p.json()["class_code"] == "LNR-5A21"
+    assert p.json()["full_name"] == "Nadia P."
     assert p.json()["phone"] == "081299990000"
-
-    # Skip / clear class_code
-    p2 = client.patch("/api/student/me", headers=h, json={"class_code": "   "})
-    assert p2.status_code == 200 and p2.json()["class_code"] is None
 
 
 def test_register_duplicate_email_409_and_rollback_on_db_failure(client, db, auth_admin):
@@ -215,9 +211,8 @@ def test_register_validation_422(client, payload):
 
 @pytest.mark.parametrize("payload", [
     {},
-    {"grade": None},
-    {"grade": 0},
-    {"grade": 13},
+    {"grade": 5},
+    {"class_code": "LNR-5A21"},
     {"full_name": "   "},
     {"phone": None},
     {"phone": "0812345"},
@@ -259,7 +254,7 @@ def test_forgot_password_validation_422(client, gotrue, payload):
 
 def test_me_requires_token(client):
     assert client.get("/api/student/me").status_code == 401
-    assert client.patch("/api/student/me", json={"grade": 5}).status_code == 401
+    assert client.patch("/api/student/me", json={"phone": "081234567890"}).status_code == 401
 
 
 def test_me_rejects_staff_token(client, admin_auth):
