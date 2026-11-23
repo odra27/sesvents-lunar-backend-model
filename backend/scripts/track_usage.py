@@ -163,19 +163,19 @@ async def main() -> int:
         report = await repo.get_account_usage(nis_list=nis_list, since=since, tz_name=tz_name)
         async with conn.cursor() as cur:
             await cur.execute(
-                "select account_type, coalesce(email, nis, '-') as ident, full_name, ever_used, total_logins,"
-                " unique_visitors, last_login_at, active_sessions, total_duration_seconds"
-                " from user_login_account_summary order by account_type, ident"
+                "select account_type, coalesce(email, '-') as email, coalesce(phone, '-') as phone, full_name,"
+                " ever_used, total_logins, unique_visitors, last_login_at, active_sessions, total_duration_seconds"
+                " from user_login_account_summary order by account_type, email"
             )
             session_summary = await cur.fetchall()
             await cur.execute(
-                "select visitor_id::text, account_type, coalesce(email, nis, '-') as ident, total_logins,"
+                "select visitor_id::text, account_type, coalesce(email, '-') as email, total_logins,"
                 " first_login_at, last_login_at, active_sessions, total_duration_seconds"
                 " from user_login_visitor_summary order by last_login_at desc limit 20"
             )
             visitor_summary = await cur.fetchall()
             await cur.execute(
-                "select session_id::text, visitor_id::text, account_type, coalesce(email, nis, '-') as ident,"
+                "select session_id::text, visitor_id::text, account_type, coalesce(email, '-') as email,"
                 " login_at, last_activity_at, effective_ended_at, session_duration_seconds, session_status"
                 " from user_login_sessions_status order by login_at desc limit 20"
             )
@@ -258,22 +258,22 @@ async def main() -> int:
                 f"  {d.date.isoformat()} | Login: {d.login_count:>4} | Refresh: {d.token_refreshed_count:>4} | Total: {d.total_events:>4}"
             )
 
-    print("\n4. Ringkasan Sesi Login (Semua Akun: Demo, Judge, Student — ADR-055/057)")
+    print("\n4. Ringkasan Sesi Login (Semua Akun: Demo, Judge, Student — ADR-055/057/059)")
     if not session_summary:
         print("Belum ada akun atau sesi di user_login_sessions.")
     else:
         print(
-            f"{'Tipe':<8} {'Email / NIS':<28} {'Nama':<22} {'Pernah?':<8} {'Logins':>6} {'Visitors':>8} {'Aktif':>6} {'Durasi(s)':>10}  {'Terakhir Login'}"
+            f"{'Tipe':<8} {'Email':<28} {'Telepon':<15} {'Nama':<20} {'Pernah?':<8} {'Logins':>6} {'Visitors':>8} {'Aktif':>6} {'Durasi(s)':>10}  {'Terakhir Login'}"
         )
-        print("-" * 125)
-        for acc_type, ident, name, used, logins, visitors, last_in, active_s, dur_s in session_summary:
+        print("-" * 138)
+        for acc_type, email, phone, name, used, logins, visitors, last_in, active_s, dur_s in session_summary:
             last_str = (
                 last_in.astimezone(zone).strftime("%Y-%m-%d %H:%M:%S %Z")
                 if last_in is not None
                 else "Belum pernah"
             )
             print(
-                f"{(acc_type or '-'):<8} {ident[:27]:<28} {name[:21]:<22} {('Ya' if used else 'Tidak'):<8} {logins:>6} {visitors:>8} {active_s:>6} {dur_s:>10}  {last_str}"
+                f"{(acc_type or '-'):<8} {email[:27]:<28} {phone[:14]:<15} {name[:19]:<20} {('Ya' if used else 'Tidak'):<8} {logins:>6} {visitors:>8} {active_s:>6} {dur_s:>10}  {last_str}"
             )
 
     print("\n5. Ringkasan per Anonymous Visitor ID (user_login_visitor_summary)")

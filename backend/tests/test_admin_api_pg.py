@@ -268,9 +268,9 @@ def test_reference_upload_persists_approved_row_and_second_is_409(admin_auth, db
         r = c.post(f"/api/admin/phrases/{pid}/references", files=[("file", ("a.mp4", mp4, "video/mp4"))], headers=h)
         assert r.status_code == 201, r.text
         ref = r.json()
-        rows = q(db_url, "select id::text, phrase_id::text, video_url, approved, landmark_data, signer_id"
+        rows = q(db_url, "select id::text, phrase_id::text, video_url, approved"
                          " from sign_references where phrase_id = %s", (pid,))
-        assert rows == [(ref["id"], str(pid), f"{pid}/{ref['id']}.mp4", True, None, None)]
+        assert rows == [(ref["id"], str(pid), f"{pid}/{ref['id']}.mp4", True)]
         assert "token" not in rows[0][2]  # DB stores the object path, never the signed URL
 
         r2 = c.post(f"/api/admin/phrases/{pid}/references", files=[("file", ("b.mp4", mp4, "video/mp4"))],

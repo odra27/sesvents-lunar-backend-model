@@ -57,6 +57,12 @@ CHECKS: dict[str, str] = {
         "select exists (select 1 from information_schema.columns"
         " where table_name = 'student_profiles' and column_name = 'phone')"
     ),
+    "20261123000000_adr059_cleanup_views_and_unused_columns.sql": (
+        "select not exists (select 1 from information_schema.columns"
+        " where table_name = 'sign_references' and column_name = 'landmark_data')"
+        " and exists (select 1 from information_schema.columns"
+        " where table_name = 'user_login_account_summary' and column_name = 'phone')"
+    ),
 }
 
 

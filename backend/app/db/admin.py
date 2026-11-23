@@ -225,7 +225,7 @@ class PostgresAdminRepository:
             return await cur.fetchone() is not None
 
     async def insert_approved_reference(self, *, reference_id: UUID, phrase_id: UUID, video_url: str) -> AdminReference:
-        # landmark_data and signer_id stay NULL (ADR-042 §12, §14). The partial unique index
+        # The partial unique index enforces one approved reference per phrase.
         # rejects a second approved reference (UniqueViolation → 409 in the route).
         async with self._conn.cursor() as cur:
             await cur.execute(
