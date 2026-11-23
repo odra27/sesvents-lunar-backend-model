@@ -46,7 +46,7 @@ CHECKS: dict[str, str] = {
     ),
     "20261122000000_adr056_b2c_email_login_register.sql": (
         "select exists (select 1 from information_schema.columns"
-        " where table_name = 'student_profiles' and column_name = 'class_code')"
+        " where table_name = 'student_profiles' and column_name in ('class_code', 'phone'))"
     ),
     "20261122010000_adr057_track_all_student_sessions.sql": (
         "select exists (select 1 from pg_constraint"
@@ -62,6 +62,11 @@ CHECKS: dict[str, str] = {
         " where table_name = 'sign_references' and column_name = 'landmark_data')"
         " and exists (select 1 from information_schema.columns"
         " where table_name = 'user_login_account_summary' and column_name = 'phone')"
+    ),
+    "20261123010000_adr060_drop_legacy_student_profile_columns.sql": (
+        "select not exists (select 1 from information_schema.columns"
+        " where table_name = 'student_profiles'"
+        "   and column_name in ('institution_id', 'nis', 'class_name', 'grade', 'class_code'))"
     ),
 }
 
