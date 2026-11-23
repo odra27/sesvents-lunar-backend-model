@@ -67,6 +67,7 @@ CHECKS: dict[str, str] = {
 
 
 def main() -> int:
+    """Check migration status and optionally apply pending SQL migrations in order."""
     _load_env_file()
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true")

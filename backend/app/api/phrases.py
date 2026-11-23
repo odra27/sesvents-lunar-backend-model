@@ -23,6 +23,7 @@ class PhraseItem(BaseModel):
 
 @router.get("/api/phrases", response_model=list[PhraseItem])
 async def list_phrases(request: Request) -> list[PhraseItem]:
+    """List all active BISINDO phrases exposed to the public client."""
     async with request.app.state.open_db() as db:
         rows = await db.phrases.list_active()
     return [PhraseItem(id=r.id, phrase_text=r.phrase_text, category=r.category) for r in rows]

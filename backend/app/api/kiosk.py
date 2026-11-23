@@ -53,6 +53,7 @@ def _own_device(device: KioskDevice | None, principal: StaffPrincipal) -> KioskD
 
 @router.post("/api/devices/{device_id}/heartbeat", status_code=204, response_class=Response)
 async def heartbeat(device_id: UUID, request: Request) -> Response:
+    """Update the last_heartbeat_at timestamp for an active kiosk device."""
     async with request.app.state.open_db() as db:
         repo = _kiosk(db)
         device = await repo.get_device(device_id)
@@ -74,6 +75,7 @@ class DeviceStatusOut(BaseModel):
 async def device_status(
     device_id: UUID, request: Request, principal: StaffPrincipal = Depends(require_staff)
 ) -> DeviceStatusOut:
+    """Return online/offline status for a device belonging to the caller's institution."""
     async with request.app.state.open_db() as db:
         device = _own_device(await _kiosk(db).get_device(device_id), principal)
     return DeviceStatusOut(
@@ -106,6 +108,7 @@ class JbiDispatchOut(BaseModel):
 async def call_jbi(
     body: CallJbiRequest, request: Request, principal: StaffPrincipal = Depends(require_staff)
 ) -> JbiDispatchOut:
+    """Create a legacy JBI dispatch record and matching_logs audit entry for an active device."""
     async with request.app.state.open_db() as db:
         repo = _kiosk(db)
         device = _own_device(await repo.get_device(body.device_id), principal)
@@ -155,6 +158,7 @@ class QueueQuery(BaseModel):
 async def current_queue(
     request: Request, q: Annotated[QueueQuery, Query()], principal: StaffPrincipal = Depends(require_staff)
 ) -> QueueOut:
+    """Return the ephemeral daily demo queue token for a device in the caller's institution."""
     async with request.app.state.open_db() as db:
         device = _own_device(await _kiosk(db).get_device(q.device_id), principal)
     return demo_queue_token(device.id, today_wib())
@@ -182,6 +186,7 @@ class StaffLogOut(BaseModel):
 async def staff_logs(
     request: Request, q: Annotated[StaffLogQuery, Query()], principal: StaffPrincipal = Depends(require_staff)
 ) -> Page[StaffLogOut]:
+    """List paginated matching logs scoped to devices within the caller's institution."""
     async with request.app.state.open_db() as db:
         rows, total = await _kiosk(db).list_staff_logs(
             principal.institution_id,

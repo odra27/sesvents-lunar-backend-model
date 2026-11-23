@@ -42,6 +42,7 @@ class MatchSignResponse(BaseModel):
 
 @router.post("/api/match/sign", response_model=MatchSignResponse)
 async def match_sign(body: MatchSignRequest, request: Request) -> MatchSignResponse:
+    """Run closed-vocabulary sign matching on a landmark sequence and apply confidence thresholds."""
     state = request.app.state
     modeling: ModelingClient | None = state.modeling
 

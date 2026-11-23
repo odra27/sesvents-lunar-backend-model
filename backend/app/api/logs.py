@@ -42,6 +42,7 @@ class LogRequest(BaseModel):
 
 @router.post("/api/logs", status_code=204, response_class=Response)
 async def create_log(body: LogRequest, request: Request) -> Response:
+    """Persist a client-reported final matching action after validating device and phrase IDs."""
     async with request.app.state.open_db() as db:
         device = await db.devices.find_by_id(body.device_id)
         if device is None:

@@ -82,6 +82,7 @@ class MeResponse(BaseModel):
 
 @router.post("/api/auth/login", response_model=LoginResponse)
 async def login(payload: LoginRequest, request: Request, response: Response) -> LoginResponse:
+    """Authenticate a staff/admin user via email, NIP, or username and return JWT tokens."""
     auth_client = getattr(request.app.state, "auth_client", None)
     verifier = getattr(request.app.state, "jwt_verifier", None)
     if auth_client is None or verifier is None:
@@ -119,6 +120,7 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
 
 @router.get("/api/me", response_model=MeResponse)
 async def me(response: Response, principal: StaffPrincipal = Depends(require_staff)) -> MeResponse:
+    """Return the authenticated staff/admin profile and its associated institution."""
     p = principal.profile
     response.headers.update(_NO_STORE)
     return MeResponse(

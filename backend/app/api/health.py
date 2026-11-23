@@ -8,6 +8,7 @@ router = APIRouter()
 
 @router.get("/api/health")
 async def health(request: Request) -> dict:
+    """Return lightweight service health metadata (modeling readiness and DB mode)."""
     modeling = request.app.state.modeling
     return {
         "status": "ok",

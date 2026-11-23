@@ -61,16 +61,20 @@ class StudentRepository(Protocol):
 
 
 class PostgresStudentRepository:
+    """PostgreSQL implementation of StudentRepository using parameterized psycopg 3 queries."""
+
     def __init__(self, conn: AsyncConnection) -> None:
         self._conn = conn
 
     async def get_profile(self, student_id: UUID) -> StudentProfile | None:
+        """Fetch a single student profile joined with optional institution and Auth email."""
         async with self._conn.cursor() as cur:
             await cur.execute(f"select {_COLS} {_FROM} where s.id = %s", (student_id,))
             row = await cur.fetchone()
         return StudentProfile(*row) if row else None
 
     async def find_login_targets(self, nis: str) -> list[StudentLoginTarget]:
+        """Resolve up to two student accounts matching an exact legacy NIS."""
         async with self._conn.cursor() as cur:
             await cur.execute(
                 f"select u.email, {_COLS} {_FROM} where s.nis = %s limit 2",
@@ -80,6 +84,7 @@ class PostgresStudentRepository:
         return [StudentLoginTarget(email=r[0], profile=StudentProfile(*r[1:])) for r in rows]
 
     async def find_login_targets_by_email(self, email: str) -> list[StudentLoginTarget]:
+        """Resolve up to two student accounts matching a case-insensitive Auth email."""
         async with self._conn.cursor() as cur:
             await cur.execute(
                 f"select u.email, {_COLS} {_FROM} where lower(u.email) = lower(%s) limit 2",
@@ -89,6 +94,7 @@ class PostgresStudentRepository:
         return [StudentLoginTarget(email=r[0], profile=StudentProfile(*r[1:])) for r in rows]
 
     async def create_b2c_profile(self, *, user_id: UUID, full_name: str, phone: str) -> StudentProfile:
+        """Insert a new self-registered B2C student profile tagged as account_type='student'."""
         async with self._conn.cursor() as cur:
             await cur.execute(
                 "insert into student_profiles (id, full_name, phone, account_type)"
@@ -101,6 +107,7 @@ class PostgresStudentRepository:
         return profile
 
     async def update_profile(self, student_id: UUID, changes: dict[str, Any]) -> StudentProfile | None:
+        """Update allowlisted profile fields (`full_name`, `grade`, `class_code`, `phone`)."""
         cols = [c for c in WRITABLE_PROFILE_FIELDS if c in changes]
         if len(cols) != len(changes) or not cols:
             raise ValueError("only writable student profile fields may be updated")

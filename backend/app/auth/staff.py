@@ -64,6 +64,7 @@ def subject_uuid(claims: dict[str, Any]) -> UUID | None:
 
 
 async def verify_bearer(request: Request) -> dict[str, Any]:
+    """Extract and cryptographically verify the Bearer JWT using the app's JWKS verifier."""
     token = extract_bearer_token(request.headers.get("authorization"))
     verifier = getattr(request.app.state, "jwt_verifier", None)
     if verifier is None:
@@ -72,6 +73,7 @@ async def verify_bearer(request: Request) -> dict[str, Any]:
 
 
 async def require_staff(request: Request) -> StaffPrincipal:
+    """FastAPI dependency: verify staff/admin JWT and ensure an active `staff_profiles` row."""
     claims = await verify_bearer(request)
     role = staff_role(claims)
     if role is None:
@@ -89,6 +91,7 @@ async def require_staff(request: Request) -> StaffPrincipal:
 
 
 async def require_institution_admin(principal: StaffPrincipal = Depends(require_staff)) -> StaffPrincipal:
+    """FastAPI dependency: restrict endpoint access to staff tokens with role `admin`."""
     if principal.role != "admin":
         raise Forbidden(_FORBIDDEN)
     return principal

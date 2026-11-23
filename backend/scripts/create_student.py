@@ -1,12 +1,11 @@
-"""Daftarkan akun siswa (ADR-051 D2, ADR-056) — dipakai operator untuk akun Demo, Juri, atau siswa.
+"""Operator CLI to provision a student account in Supabase Auth and `student_profiles`.
 
-Contoh akun B2C berbasis Email (ADR-056):
+Examples (ADR-051 D2, ADR-056, ADR-057):
     cd backend
-    .venv/bin/python scripts/create_student.py --email demo@lunar.app --name "Akun Demo" --grade 5 --account-type demo
-    .venv/bin/python scripts/create_student.py --email juri@lunar.app --name "Akun Juri" --grade 5 --account-type judge
+    .venv/bin/python scripts/create_student.py --email demo.lunar@gmail.com --name "Akun Demo" --grade 5 --account-type demo
+    .venv/bin/python scripts/create_student.py --email juri.lunar@gmail.com --name "Akun Juri" --grade 5 --account-type judge
 
-Password ditanyakan lewat prompt (tidak muncul di layar / riwayat shell). Bisa juga lewat env
-STUDENT_PASSWORD untuk otomatisasi.
+Password is read securely via getpass prompt (never echoed) or `STUDENT_PASSWORD` env var.
 """
 from __future__ import annotations
 
@@ -29,8 +28,9 @@ EMAIL_DOMAIN = "siswa.isyara.local"
 
 
 def parse() -> argparse.Namespace:
+    """Parse CLI arguments for student account provisioning."""
     p = argparse.ArgumentParser(description="Daftarkan akun siswa (Email + password).")
-    p.add_argument("--email", help="Email login siswa (mis. demo@lunar.app). Wajib jika --nis tidak diisi.")
+    p.add_argument("--email", help="Email login siswa (mis. demo.lunar@gmail.com). Wajib jika --nis tidak diisi.")
     p.add_argument("--nis", help="Opsional: NIS siswa (legacy / jalur sekolah).")
     p.add_argument("--name", required=True, help="Nama panggilan / lengkap siswa.")
     p.add_argument("--class", dest="class_name")
@@ -47,6 +47,7 @@ def parse() -> argparse.Namespace:
 
 
 async def main() -> int:
+    """Create the Supabase Auth user and matching `student_profiles` row (with rollback on DB error)."""
     _load_env_file()
     a = parse()
     nis = a.nis.strip() if a.nis else None

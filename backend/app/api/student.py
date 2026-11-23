@@ -1,27 +1,25 @@
-"""Student login, self-registration, and profile (ADR-051 D2, ADR-052, ADR-055, ADR-056).
+"""Student authentication, self-registration, session tracking, and profile endpoints.
 
-POST /api/student/auth/login  (ADR-056)
-    {email, password, visitor_id?} → exactly one active student profile for that email
-    → Supabase Auth password grant → verify the issued token (ADR-039 verifier)
-    → `app_metadata.role` must be "siswa" and `sub` must equal the profile id.
-    Every credential-level failure → 401 INVALID_CREDENTIALS with one generic message.
-    Supabase Auth / JWKS unavailable → 503 AUTH_UNAVAILABLE.
-    Responses carry `Cache-Control: no-store`. Passwords and tokens are never logged.
+Routes (ADR-051 D2, ADR-052, ADR-055, ADR-056, ADR-057, ADR-058):
+    POST /api/student/auth/login
+        {email, password, visitor_id?} → verify Supabase Auth password grant + `siswa` role
+        → record session in `user_login_sessions` → 200 {access_token, refresh_token, student}.
+    POST /api/student/auth/register
+        {full_name, email, phone (^0[0-9]{7,14}$), password (min 8), visitor_id?}
+        → create Supabase Auth user (role `siswa`) + B2C `student_profiles` row (with rollback)
+        → sign in and record session → 201 {access_token, refresh_token, student}.
+    POST /api/student/auth/forgot-password
+        {email} → trigger Supabase recovery email for active students; always returns 204
+        (anti-enumeration).
+    POST /api/student/auth/refresh
+        {refresh_token} → rotate token pair, re-verify `siswa` role + active profile, touch session.
+    POST /api/student/auth/logout & POST /api/student/session/heartbeat
+        `require_student` → close or touch the caller's login session (best-effort) → 204.
+    GET /api/student/me & PATCH /api/student/me
+        `require_student` → read or update own profile (`full_name`, `grade`, `class_code`, `phone`).
 
-POST /api/student/auth/register  (ADR-056)
-    {full_name, email, password (min 8), visitor_id?} → create Supabase Auth user (role "siswa")
-    → insert B2C `student_profiles` row (rollback Auth user if DB fails)
-    → password grant → 201 {access_token, token_type, expires_in, refresh_token, student}.
-    Duplicate email → 409 CONFLICT. Weak password → 422 VALIDATION_ERROR.
-
-POST /api/student/auth/refresh  (ADR-052)
-    {refresh_token} → Supabase refresh grant → same response as login, re-checking role + active profile.
-
-POST /api/student/auth/logout & POST /api/student/session/heartbeat  (ADR-055)
-    `require_student` → record logout or heartbeat for tracked Demo/Judge accounts (best-effort).
-
-GET /api/student/me & PATCH /api/student/me  (ADR-051 D2, ADR-056)
-    `require_student` → read or complete own profile (full_name, grade 1..12, optional class_code).
+Security:
+    All auth responses carry `Cache-Control: no-store`. Passwords and tokens are never logged.
 """
 from __future__ import annotations
 
@@ -180,6 +178,7 @@ class StudentLoginResponse(BaseModel):
 
 
 def student_out(p: StudentProfile) -> StudentOut:
+    """Map a database StudentProfile record to the public StudentOut API schema."""
     institution = (
         InstitutionOut(id=p.institution_id, name=p.institution_name)
         if p.institution_id is not None and p.institution_name is not None
@@ -231,6 +230,7 @@ async def _record_login_session(
 
 @router.post("/api/student/auth/login", response_model=StudentLoginResponse)
 async def student_login(payload: StudentLoginRequest, request: Request, response: Response) -> StudentLoginResponse:
+    """Authenticate an active student via email + password and record a login session."""
     auth_client = getattr(request.app.state, "auth_client", None)
     verifier = getattr(request.app.state, "jwt_verifier", None)
     if auth_client is None or verifier is None:
@@ -447,6 +447,7 @@ async def student_session_heartbeat(
 
 @router.get("/api/student/me", response_model=StudentOut)
 async def student_me(response: Response, principal: StudentPrincipal = Depends(require_student)) -> StudentOut:
+    """Return the authenticated student's own profile."""
     response.headers.update(_NO_STORE)
     return student_out(principal.profile)
 

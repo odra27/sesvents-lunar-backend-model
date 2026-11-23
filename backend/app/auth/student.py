@@ -42,11 +42,13 @@ class StudentPrincipal:
 
 
 def is_student(claims: dict[str, Any]) -> bool:
+    """Return True iff verified JWT `app_metadata.role` equals the student role (`siswa`)."""
     app_metadata = claims.get("app_metadata")
     return isinstance(app_metadata, dict) and app_metadata.get("role") == STUDENT_ROLE
 
 
 async def require_student(request: Request) -> StudentPrincipal:
+    """FastAPI dependency: verify student JWT, ensure active profile, and touch login session."""
     claims = await verify_bearer(request)
     if not is_student(claims):
         raise Forbidden("Forbidden")

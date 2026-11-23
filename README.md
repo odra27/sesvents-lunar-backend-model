@@ -1,37 +1,29 @@
 # LUNAR — Backend + Modeling
 
-API FastAPI + model pengenalan isyarat BISINDO (`ml/`, ONNX) untuk LUNAR, platform belajar inklusif untuk siswa Tuli. Frontend ada di repo terpisah (`Sesvents-Frontend`).
+API FastAPI + model pengenalan isyarat BISINDO (`ml/`, ONNX) untuk **LUNAR**, platform belajar inklusif untuk siswa Tuli. Frontend berada di repo terpisah.
 
-## Isi repo
+## Isi Repo
 
-| Folder / file | Isi |
+| Folder / File | Keterangan |
 |---|---|
-| `backend/` | API FastAPI (Python 3.12), test, skrip admin (`scripts/`) |
-| `ml/` | Paket `bisindo`: model, artefak aktif (`artifacts/`), model MediaPipe (`mp_models/`), skrip training |
-| `Database/` | Migration SQL Supabase (urut timestamp) |
-| `Dockerfile` | Satu image untuk deploy: API + model dalam satu service |
-| `start-dev.ps1` / `stop-dev.ps1` | Jalankan / matikan backend lokal (`.cmd` = versi klik dua kali) |
-| `AGENTS.md`, `decisions.md`, `PRD.md`, `SYSTEM_DESIGN.md`, `ARCHITECTURE.md` | Aturan kerja, ADR, produk, kontrak API, arsitektur |
+| `api/index.py` | Entrypoint Vercel Serverless untuk aplikasi FastAPI |
+| `backend/` | API FastAPI (Python 3.12), auth Supabase, repository Postgres, test, dan CLI operator (`backend/scripts/`) |
+| `ml/` | Paket `bisindo`: model ONNX (`artifacts/`), model MediaPipe (`mp_models/`), dan skrip training |
+| `Database/migrations/` | Migrasi SQL Supabase (urut timestamp, idempoten) |
+| `BACKEND.md` | **Dokumentasi lengkap Backend** (arsitektur, cara menjalankan lokal, testing, script CLI, dan deploy) |
+| `AGENTS.md`, `decisions.md`, `PRD.md`, `SYSTEM_DESIGN.md`, `ARCHITECTURE.md` | Aturan engineering, ADR, spesifikasi produk, desain sistem, dan arsitektur |
 
-## Jalankan lokal (Windows)
+## Menjalankan Secara Lokal
 
-```powershell
-# 1. Isi backend\.env dari backend\.env.example (kosong = DB in-memory, tanpa login/chat)
-# 2. Jalankan (setup venv Python 3.12 otomatis saat pertama kali)
-.\start-dev.ps1
-```
+Panduan lengkap instalasi virtual environment, konfigurasi `.env`, menjalankan server di macOS/Linux/Windows, hingga `pytest` tersedia di **[BACKEND.md](BACKEND.md)**.
 
-API di `http://127.0.0.1:8000` (cek `GET /api/health`; model dimuat ~30 detik). Matikan dengan `.\stop-dev.ps1`.
-
-Test: dari `backend\`, `.\.venv\Scripts\python.exe -m pytest`.
-
-## Deploy
-
+Ringkasan cepat (macOS / Linux):
 ```bash
-docker build -t lunar-backend .
-docker run -p 8000:8000 --env-file backend/.env lunar-backend
+cd backend
+set -a && source .env && set +a
+.venv/bin/python serve.py --host 127.0.0.1 --port 8000
 ```
 
-Di Railway / Render cukup hubungkan repo ini; `Dockerfile` di root terdeteksi otomatis. Isi variabel dari `backend/.env.example` di dashboard (jangan set `LOCAL_DEV_DB`) dan set `CORS_ALLOW_ORIGINS` ke URL frontend. Detail: `ARCHITECTURE.md` §9.
+Cek status server: `GET http://127.0.0.1:8000/api/health`.
 
-> `backend/.env` berisi rahasia dan sudah di-ignore git. Jangan di-commit.
+> `backend/.env` berisi kredensial rahasia dan sudah di-ignore oleh Git serta Vercel. Jangan pernah di-commit.

@@ -141,6 +141,7 @@ class PhrasePatch(BaseModel):
 
 @router.get("/phrases", response_model=Page[PhraseOut])
 async def list_phrases(request: Request, q: Annotated[PageQuery, Query()]) -> Page[PhraseOut]:
+    """List all vocabulary phrases (active and inactive) with pagination."""
     async with request.app.state.open_db() as db:
         rows, total = await _repo(db).list_phrases(limit=q.page_size, offset=q.offset)
     return Page[PhraseOut](
@@ -150,6 +151,7 @@ async def list_phrases(request: Request, q: Annotated[PageQuery, Query()]) -> Pa
 
 @router.post("/phrases", response_model=PhraseOut, status_code=201)
 async def create_phrase(body: PhraseCreate, request: Request) -> PhraseOut:
+    """Create a new vocabulary phrase; returns 409 CONFLICT if phrase_text already exists."""
     async with request.app.state.open_db() as db:
         repo = _repo(db)
         if await repo.phrase_text_taken(body.phrase_text):
@@ -163,6 +165,7 @@ async def create_phrase(body: PhraseCreate, request: Request) -> PhraseOut:
 
 @router.patch("/phrases/{phrase_id}", response_model=PhraseOut)
 async def update_phrase(phrase_id: UUID, body: PhrasePatch, request: Request) -> PhraseOut:
+    """Partially update an existing phrase's text, category, or active flag."""
     async with request.app.state.open_db() as db:
         repo = _repo(db)
         if await repo.get_phrase(phrase_id) is None:
@@ -208,6 +211,7 @@ class LogOut(BaseModel):
 
 @router.get("/logs", response_model=Page[LogOut])
 async def list_logs(request: Request, q: Annotated[LogQuery, Query()]) -> Page[LogOut]:
+    """List paginated matching logs with optional device, phrase, action, and date filters."""
     filters = LogFilters(
         device_id=q.device_id,
         predicted_phrase_id=q.predicted_phrase_id,
@@ -234,6 +238,7 @@ class DeviceOut(BaseModel):
 
 @router.get("/devices", response_model=Page[DeviceOut])
 async def list_devices(request: Request, q: Annotated[PageQuery, Query()]) -> Page[DeviceOut]:
+    """List registered kiosk devices with pagination."""
     async with request.app.state.open_db() as db:
         rows, total = await _repo(db).list_devices(limit=q.page_size, offset=q.offset)
     return Page[DeviceOut](
@@ -317,6 +322,7 @@ class ReferenceOut(BaseModel):
 
 @router.post("/phrases/{phrase_id}/references", response_model=ReferenceOut, status_code=201)
 async def upload_reference(phrase_id: UUID, request: Request) -> ReferenceOut:
+    """Upload and approve a sign reference video (MP4/WebM, <=50 MB) to private storage."""
     data, mime = await _read_upload(request)
 
     open_db = request.app.state.open_db
@@ -451,6 +457,7 @@ def _staff_repo(db) -> StaffRepository:
 async def create_staff(
     body: StaffCreate, request: Request, principal: StaffPrincipal = Depends(require_institution_admin)
 ) -> StaffOut:
+    """Provision a new staff/admin account in Supabase Auth and staff_profiles (with rollback)."""
     provisioning = getattr(request.app.state, "auth_admin", None)
     if provisioning is None:
         raise AuthUnavailable("Authentication service unavailable")
@@ -493,6 +500,7 @@ async def list_staff(
     q: Annotated[PageQuery, Query()],
     principal: StaffPrincipal = Depends(require_institution_admin),
 ) -> Page[StaffOut]:
+    """List staff accounts belonging to the authenticated admin's institution."""
     async with request.app.state.open_db() as db:
         rows, total = await _staff_repo(db).list_by_institution(
             # caller's own institution only
@@ -511,6 +519,7 @@ MAX_TRACKED_NIS = 50
 
 
 def parse_nis_values(raw: list[str] | str | None) -> list[str] | None:
+    """Normalize and deduplicate comma- or list-separated NIS filter values."""
     if raw is None:
         return None
     items = [raw] if isinstance(raw, str) else list(raw)
@@ -603,6 +612,7 @@ def _resolve_tracked_nis(query_nis: list[str] | None) -> list[str] | None:
 async def get_account_usage(
     request: Request, q: Annotated[AccountUsageQuery, Query()]
 ) -> AccountUsageOut:
+    """Aggregate student login counts, peak hours, and daily activity from Supabase Auth audit logs."""
     nis_list = _resolve_tracked_nis(q.nis)
     since = datetime.now(timezone.utc) - timedelta(days=q.days)
     zone = ZoneInfo(q.tz)

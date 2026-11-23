@@ -24,10 +24,12 @@ _MAX_VALIDATION_ITEMS = 5
 
 
 def error_body(code: str, message: str) -> dict[str, Any]:
+    """Build the standard `{"error": {"code", "message"}}` response envelope."""
     return {"error": {"code": code, "message": message}}
 
 
 def from_backend_error(exc: BackendError) -> tuple[int, dict[str, Any]]:
+    """Convert a domain BackendError into an `(http_status, error_body)` tuple."""
     return exc.http_status, error_body(exc.code, exc.message)
 
 
@@ -45,9 +47,10 @@ def from_error_list(errors: Sequence[Mapping[str, Any]]) -> tuple[int, dict[str,
 
 
 def from_validation_error(exc: ValidationError) -> tuple[int, dict[str, Any]]:
+    """Convert a Pydantic ValidationError into a 422 envelope without echoing input values."""
     return from_error_list(exc.errors(include_input=False, include_url=False, include_context=False))
 
 
 def from_unexpected_error(_exc: BaseException) -> tuple[int, dict[str, Any]]:
-    # Unknown failures (incl. database errors) never expose details.
+    """Return a generic 500 envelope so unexpected internal/DB errors never leak details."""
     return 500, error_body("INTERNAL_ERROR", "Internal server error")

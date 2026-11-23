@@ -1,14 +1,14 @@
-"""Laporan tracking penggunaan akun siswa / demo (juri & coba) — ADR-054.
+"""Operator CLI report for student login activity and session tracking (ADR-054, ADR-055, ADR-057, ADR-059).
 
-Menampilkan:
-  - Seberapa sering akun di-login (`login` dan `token_refreshed` di `auth.audit_log_entries`)
-  - Kapan terakhir dipakai login (`last_sign_in_at` di `auth.users`)
-  - Jam sibuk kunjungan (Peak Hours 00:00–23:00 dalam timezone pilihan)
-  - Distribusi kunjungan per hari
+Displays:
+  - Login / token-refresh counts and last sign-in per account (`auth.users` & `auth.audit_log_entries`)
+  - Peak hours (00:00–23:00) and daily activity in the chosen timezone (default `Asia/Jakarta`)
+  - Session summaries, anonymous visitor counts, and recent sessions from `user_login_sessions` views
 
-Contoh penggunaan:
-    cd backend && set -a && source .env && set +a
-    .venv/bin/python scripts/track_usage.py --nis 1001 1002 --days 30 --tz Asia/Jakarta
+Examples:
+    cd backend
+    .venv/bin/python scripts/track_usage.py --days 30 --tz Asia/Jakarta
+    .venv/bin/python scripts/track_usage.py --simulate-login demo.lunar@gmail.com
     .venv/bin/python scripts/track_usage.py --json
 """
 from __future__ import annotations
@@ -33,6 +33,7 @@ from scripts.apply_migrations import _load_env_file  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse CLI options for date window, timezone, JSON output, and optional login simulation."""
     p = argparse.ArgumentParser(
         description="Tracking aktivitas login & sesi akun siswa/demo (ADR-054)."
     )
@@ -121,6 +122,7 @@ async def _run_simulated_login(email: str, *, keep_active: bool) -> int:
 
 
 async def main() -> int:
+    """Query Supabase Auth logs and `user_login_*` views and print the usage report."""
     _load_env_file()
     args = parse_args()
     if not (1 <= args.days <= 365):

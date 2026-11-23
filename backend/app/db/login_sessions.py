@@ -151,6 +151,8 @@ class LoginSessionRepository(Protocol):
 
 
 class PostgresLoginSessionRepository:
+    """PostgreSQL repository for recording and updating rows in `user_login_sessions`."""
+
     def __init__(self, conn: AsyncConnection) -> None:
         self._conn = conn
 
@@ -162,6 +164,7 @@ class PostgresLoginSessionRepository:
         auth_session_id: str | None = None,
         visitor_id: UUID | None = None,
     ) -> UUID:
+        """Insert a new login session row without overwriting prior history and return its UUID."""
         async with self._conn.cursor() as cur:
             await cur.execute(
                 "insert into user_login_sessions (user_id, account_type, auth_session_id, visitor_id)"
@@ -180,6 +183,7 @@ class PostgresLoginSessionRepository:
         min_interval_seconds: int = 0,
         inactivity_minutes: int = INACTIVITY_TIMEOUT_MINUTES,
     ) -> bool:
+        """Update `last_activity_at` and duration on the caller's latest active session."""
         async with self._conn.cursor() as cur:
             if auth_session_id is not None:
                 await cur.execute(
@@ -244,6 +248,7 @@ class PostgresLoginSessionRepository:
         visitor_id: UUID | None = None,
         inactivity_minutes: int = INACTIVITY_TIMEOUT_MINUTES,
     ) -> bool:
+        """Mark the caller's latest open session as logged out and finalize its duration."""
         async with self._conn.cursor() as cur:
             if auth_session_id is not None:
                 await cur.execute(

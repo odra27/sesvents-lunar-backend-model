@@ -206,6 +206,7 @@ class SendMessageResponse(BaseModel):
 async def list_sessions(
     request: Request, q: Annotated[PageQuery, Query()], principal: StudentPrincipal = Depends(require_student)
 ) -> Page[SessionOut]:
+    """List the authenticated student's chat sessions ordered by most recently updated."""
     async with request.app.state.open_db() as db:
         rows, total = await _chat(db).list_sessions(principal.user_id, limit=q.page_size, offset=q.offset)
     return Page[SessionOut](items=[_session(r) for r in rows], page=q.page, page_size=q.page_size, total=total)
@@ -215,6 +216,7 @@ async def list_sessions(
 async def create_session(
     request: Request, body: CreateSessionRequest | None = None, principal: StudentPrincipal = Depends(require_student)
 ) -> SessionOut:
+    """Create a new chat session for the authenticated student."""
     title = title_from(body.title) if body and body.title else DEFAULT_TITLE
     async with request.app.state.open_db() as db:
         row = await _chat(db).create_session(principal.user_id, title)
@@ -226,6 +228,7 @@ async def rename_session(
     session_id: UUID, body: RenameSessionRequest, request: Request,
     principal: StudentPrincipal = Depends(require_student),
 ) -> SessionOut:
+    """Rename a chat session owned by the authenticated student."""
     async with request.app.state.open_db() as db:
         row = await _chat(db).rename_session(principal.user_id, session_id, title_from(body.title))
     if row is None:
@@ -237,6 +240,7 @@ async def rename_session(
 async def delete_session(
     session_id: UUID, request: Request, principal: StudentPrincipal = Depends(require_student)
 ) -> Response:
+    """Delete a chat session and its messages/documents if owned by the caller."""
     async with request.app.state.open_db() as db:
         deleted = await _chat(db).delete_session(principal.user_id, session_id)
     if not deleted:
@@ -248,6 +252,7 @@ async def delete_session(
 async def list_messages(
     session_id: UUID, request: Request, principal: StudentPrincipal = Depends(require_student)
 ) -> SessionMessagesOut:
+    """Fetch recent messages and attached PDF metadata for a student's chat session."""
     async with request.app.state.open_db() as db:
         repo = _chat(db)
         session = await repo.get_session(principal.user_id, session_id)
@@ -264,6 +269,7 @@ async def send_message(
     session_id: UUID, body: SendMessageRequest, request: Request,
     principal: StudentPrincipal = Depends(require_student),
 ) -> SendMessageResponse:
+    """Generate a tutor reply with optional video/PDF context and persist both turns atomically."""
     model = getattr(request.app.state, "chat_model", None)
     if model is None:
         raise ChatModelUnavailable("Chat model unavailable")
@@ -346,6 +352,7 @@ async def _read_pdf_upload(request: Request) -> tuple[bytes, str]:
 async def upload_document(
     session_id: UUID, request: Request, principal: StudentPrincipal = Depends(require_student),
 ) -> DocumentOut:
+    """Extract text from an uploaded PDF (<=5 MB, <=10 pages) and attach it to a chat session."""
     async with request.app.state.open_db() as db:  # ownership first: no parsing for foreign sessions
         repo = _chat(db)
         if await repo.get_session(principal.user_id, session_id) is None:
@@ -372,6 +379,7 @@ async def upload_document(
 async def list_documents(
     request: Request, principal: StudentPrincipal = Depends(require_student),
 ) -> dict[str, list[StudentDocumentOut]]:
+    """List all uploaded PDF documents across the authenticated student's chat sessions."""
     async with request.app.state.open_db() as db:
         rows = await _chat(db).list_documents(principal.user_id, limit=100)
     return {"items": [StudentDocumentOut(**_document(r.document).model_dump(), session_title=r.session_title)
@@ -382,6 +390,7 @@ async def list_documents(
 async def activity(
     request: Request, principal: StudentPrincipal = Depends(require_student),
 ) -> ActivityOut:
+    """Return the student's 7-day learning activity counts (video questions and uploaded PDFs)."""
     since = datetime.now(timezone.utc) - timedelta(days=ACTIVITY_DAYS)
     async with request.app.state.open_db() as db:
         a = await _chat(db).activity(principal.user_id, since)
