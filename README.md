@@ -11,7 +11,8 @@ API FastAPI + model pengenalan isyarat BISINDO (`ml/`, ONNX) untuk **LUNAR**, pl
 | `ml/` | Paket `bisindo`: model ONNX (`artifacts/`), model MediaPipe (`mp_models/`), dan skrip training |
 | `Database/migrations/` | Migrasi SQL Supabase (urut timestamp, idempoten) |
 | `BACKEND.md` | **Dokumentasi lengkap Backend** (arsitektur, cara menjalankan lokal, testing, script CLI, dan deploy) |
-| `AGENTS.md`, `decisions.md`, `PRD.md`, `SYSTEM_DESIGN.md`, `ARCHITECTURE.md` | Aturan engineering, ADR, spesifikasi produk, desain sistem, dan arsitektur |
+| `docs/` | Dokumen spesifikasi & arsitektur (`PRD.md`, `SYSTEM_DESIGN.md`, `ARCHITECTURE.md`, `decisions.md`) |
+| `AGENTS.md` | Aturan kerja engineering untuk developer & AI agent |
 
 ## Menjalankan Secara Lokal
 

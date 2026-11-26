@@ -1,4 +1,4 @@
-"""Dev server launcher (dipakai run-dev.ps1).
+"""Local dev server launcher.
 
 Di Windows uvicorn memakai ProactorEventLoop bila dijalankan tanpa --reload, sedangkan psycopg
 async hanya bisa jalan di SelectorEventLoop (tanpa ini semua endpoint yang menyentuh database

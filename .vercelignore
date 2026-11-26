@@ -12,4 +12,5 @@ ml/tests
 ml/scripts
 backend/tests
 Database
+docs
 *.docx
