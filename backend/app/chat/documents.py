@@ -89,6 +89,11 @@ def safe_filename(name: str | None) -> str:
     return base
 
 
+def _neutralize_delimiters(text: str) -> str:
+    """Prevent untrusted PDF text or filenames from breaking out of <<< ... >>> delimiters."""
+    return text.replace("<<<", "< < <").replace(">>>", "> > >")
+
+
 def document_context(docs: list[tuple[str, str]], budget: int = 12_000) -> str | None:
     """System context from (filename, text) pairs, newest first, within a character budget."""
     parts: list[str] = []
@@ -96,8 +101,10 @@ def document_context(docs: list[tuple[str, str]], budget: int = 12_000) -> str |
     for name, text in docs:
         if left <= 200:
             break
-        chunk = text if len(text) <= left else text[:left].rsplit(" ", 1)[0] + " …"
-        parts.append(f'Isi file "{name}":\n<<<\n{chunk}\n>>>')
+        safe_name = _neutralize_delimiters(name)
+        safe_text = _neutralize_delimiters(text)
+        chunk = safe_text if len(safe_text) <= left else safe_text[:left].rsplit(" ", 1)[0] + " …"
+        parts.append(f'Isi file "{safe_name}":\n<<<\n{chunk}\n>>>')
         left -= len(chunk)
     if not parts:
         return None

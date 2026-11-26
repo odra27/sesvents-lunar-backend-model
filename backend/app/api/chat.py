@@ -42,7 +42,14 @@ from app.auth.student import StudentPrincipal, require_student
 from app.chat.documents import MAX_PDF_BYTES, document_context, extract_pdf_text, safe_filename
 from app.chat.model import ChatTurn
 from app.db.chat import ChatDocument, ChatMessage, ChatRepository, ChatSession
-from app.errors import ChatModelUnavailable, ChatSessionNotFound, DocumentInvalid, DocumentTooLarge
+from app.db.login_sessions import resolve_account_type
+from app.errors import (
+    ChatModelUnavailable,
+    ChatSessionNotFound,
+    DocumentInvalid,
+    DocumentTooLarge,
+    RateLimited,
+)
 from app.learning.catalog import VIDEOS, video_context
 
 router = APIRouter()
@@ -54,6 +61,9 @@ TITLE_MAX = 60
 DOCS_FOR_MODEL = 2  # newest uploaded documents of the session sent as context
 MAX_DOCS_PER_SESSION = 5
 ACTIVITY_DAYS = 7
+CHAT_RATE_WINDOW_S = 300  # 5-minute sliding window (ADR-061)
+CHAT_RATE_LIMIT_STUDENT = 20  # personal student accounts
+CHAT_RATE_LIMIT_SHARED = 60  # shared demo & judge accounts
 _NOT_FOUND = "Chat session not found"
 _MULTIPART_SLACK_BYTES = 64 * 1024
 
@@ -274,12 +284,20 @@ async def send_message(
     if model is None:
         raise ChatModelUnavailable("Chat model unavailable")
 
-    # 1. ownership + context (connection closed before the slow model call)
+    # 1. ownership + per-user rate limit + context (connection closed before the slow model call)
+    account_type = resolve_account_type(principal.profile)
+    rate_limit = CHAT_RATE_LIMIT_SHARED if account_type in ("demo", "judge") else CHAT_RATE_LIMIT_STUDENT
     async with request.app.state.open_db() as db:
         repo = _chat(db)
         current = await repo.get_session(principal.user_id, session_id)
         if current is None:
             raise ChatSessionNotFound(_NOT_FOUND)
+        recent = await repo.count_recent_user_messages(principal.user_id, window_seconds=CHAT_RATE_WINDOW_S)
+        if recent >= rate_limit:
+            raise RateLimited(
+                "Too many messages. Please wait a few minutes before sending another question.",
+                retry_after_seconds=CHAT_RATE_WINDOW_S,
+            )
         history = await repo.list_messages(session_id, limit=HISTORY_FOR_MODEL)
         doc_texts = await repo.document_texts(session_id, limit=DOCS_FOR_MODEL)
 

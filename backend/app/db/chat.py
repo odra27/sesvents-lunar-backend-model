@@ -104,6 +104,10 @@ class ChatRepository(Protocol):
     async def activity(self, student_id: UUID,
                        since: datetime) -> ChatActivity: ...
 
+    async def count_recent_user_messages(
+        self, student_id: UUID, *, window_seconds: int
+    ) -> int: ...
+
 
 class PostgresChatRepository:
     def __init__(self, conn: AsyncConnection) -> None:
@@ -250,3 +254,15 @@ class PostgresChatRepository:
             )
             q, d = await cur.fetchone()
         return ChatActivity(video_questions=int(q), documents=int(d))
+
+    async def count_recent_user_messages(self, student_id: UUID, *, window_seconds: int) -> int:
+        """Count user-role messages sent by a student across all sessions within the trailing window."""
+        async with self._conn.cursor() as cur:
+            await cur.execute(
+                "select count(*) from chat_messages m"
+                " join chat_sessions s on s.id = m.session_id"
+                " where s.student_id = %s and m.role = 'user'"
+                "   and m.created_at >= now() - make_interval(secs => %s)",
+                (student_id, window_seconds),
+            )
+            return int((await cur.fetchone())[0])

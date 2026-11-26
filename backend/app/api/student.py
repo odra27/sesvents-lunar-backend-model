@@ -211,12 +211,17 @@ async def _record_login_session(
                 )
     except Exception:
         pass
+    is_https = (
+        request.url.scheme == "https"
+        or request.headers.get("x-forwarded-proto", "").split(",")[0].strip().lower() == "https"
+    )
     response.set_cookie(
         key=VISITOR_COOKIE_NAME,
         value=str(visitor_id),
         max_age=VISITOR_COOKIE_MAX_AGE_S,
         path="/",
         httponly=True,
+        secure=is_https,
         samesite="lax",
     )
 

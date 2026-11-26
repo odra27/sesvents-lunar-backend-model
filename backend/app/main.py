@@ -136,16 +136,24 @@ def create_app(
     app.state.chat_model = None
     app.state.open_db = open_db
 
-    # Tanpa ini browser memblokir semua request FE (beda port = beda origin).
-    # Bearer token dikirim lewat header Authorization, bukan cookie → allow_credentials tidak perlu.
+    # Restrict browser CORS to approved origins and LUNAR's own Vercel preview deployments.
+    # Bearer tokens travel via Authorization header (not cookies), so allow_credentials stays False.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins(),
-        allow_origin_regex=r"^https://.*\.vercel\.app$",
+        allow_origin_regex=r"^https://lunarsesvent(-[a-z0-9-]+)?\.vercel\.app$",
         allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "X-Visitor-Id"],
         max_age=600,
     )
+
+    @app.middleware("http")
+    async def _security_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        return response
 
     @app.exception_handler(RequestValidationError)
     async def _validation(_request: Request, exc: RequestValidationError) -> JSONResponse:

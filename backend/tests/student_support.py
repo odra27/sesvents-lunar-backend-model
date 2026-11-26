@@ -220,6 +220,15 @@ class FakeChatRepo:
             1 for doc, _ in self.documents if doc.session_id in own and doc.created_at >= since)
         return ChatActivity(video_questions=q, documents=d)
 
+    async def count_recent_user_messages(self, student_id, *, window_seconds):
+        cutoff = self._clock - timedelta(seconds=window_seconds)
+        own = {sid for sid, (stu, _) in self.sessions.items() if stu == student_id}
+        return sum(
+            1
+            for m in self.messages
+            if m.session_id in own and m.role == "user" and m.created_at >= cutoff
+        )
+
 
 class FakeLoginSessionRepo:
     """In-memory LoginSessionRepository (ADR-055)."""

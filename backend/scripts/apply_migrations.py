@@ -68,6 +68,14 @@ CHECKS: dict[str, str] = {
         " where table_name = 'student_profiles'"
         "   and column_name in ('institution_id', 'nis', 'class_name', 'grade', 'class_code'))"
     ),
+    "20261126000000_adr061_rls_and_security_invoker.sql": (
+        "select (select bool_and(c.relrowsecurity) from pg_class c"
+        " join pg_namespace n on n.oid = c.relnamespace"
+        " where n.nspname = 'public' and c.relname in ('devices', 'institutions', 'matching_logs', 'phrases', 'sign_references'))"
+        " and (select count(*) = 3 from pg_class c join pg_namespace n on n.oid = c.relnamespace"
+        " where n.nspname = 'public' and c.relname in ('user_login_account_summary', 'user_login_sessions_status', 'user_login_visitor_summary')"
+        "   and 'security_invoker=true' = any(coalesce(c.reloptions, array[]::text[])))"
+    ),
 }
 
 

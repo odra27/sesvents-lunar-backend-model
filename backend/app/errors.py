@@ -23,6 +23,7 @@ Each error carries a stable `code` and the approved HTTP status:
     DOCUMENT_INVALID      422   (chat PDF upload: not a readable, unencrypted PDF, ADR-053)
     DOCUMENT_NO_TEXT      422   (chat PDF upload: no text layer, e.g. a scan, ADR-053)
     DOCUMENT_TOO_LARGE    413   (chat PDF upload: over the byte or page limit, ADR-053)
+    RATE_LIMITED          429   (per-user chat rate limit exceeded, ADR-061; adds Retry-After)
 
 Messages must never contain patient input (landmarks, audio, video) — ADR-012.
 """
@@ -179,3 +180,14 @@ class DocumentTooLarge(BackendError):
 
     code = "DOCUMENT_TOO_LARGE"
     http_status = 413
+
+
+class RateLimited(BackendError):
+    """Caller exceeded the per-user rate limit (ADR-061)."""
+
+    code = "RATE_LIMITED"
+    http_status = 429
+
+    def __init__(self, message: str, *, retry_after_seconds: int = 300) -> None:
+        super().__init__(message)
+        self.headers = {"Retry-After": str(max(1, retry_after_seconds))}
