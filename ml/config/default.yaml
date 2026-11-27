@@ -46,7 +46,7 @@ augment:
   scale: [0.85, 1.15]
   shift: 0.15
   time_warp: 0.2              # max local speed change of the nonuniform time warp
-  crop_max_ratio: 0.15        # random crop at start/end
+  crop_max_ratio: 0.10        # random crop at start/end (capped to preserve 2-part compound signs)
   frame_drop_p: 0.1
   noise_std: 0.01
   hand_dropout_p: 0.3         # probability to apply a short hand-dropout span
@@ -55,12 +55,12 @@ augment:
   # Continuous signing (scripts/live_continuous.py): words start/end with hands already up.
   # With this probability, cut midair_crop of the sign at each end (the rise from / return to rest).
   midair_p: 0.5
-  midair_crop: [0.1, 0.35]
+  midair_crop: [0.05, 0.15]
 
 none_class:
   enabled: true
   ratio: 0.08                 # fraction of each training batch that is synthetic "none"
-  none_weight: 2.0            # extra loss weight on the none class (real + synthetic negatives)
+  none_weight: 1.0            # balanced loss weight on the none class (prevents over-rejection on live webcam)
   # sampling weights of synthetic none kinds [still hold, splice of two signs, rigid trajectory].
   # Splices look like a mid-air word fragment, so they are rarer than the default uniform 1/3.
   kind_p: [0.45, 0.1, 0.45]

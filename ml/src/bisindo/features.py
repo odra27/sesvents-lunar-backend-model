@@ -44,6 +44,8 @@ def canonicalize(a: dict, pose_points: list[int]) -> dict:
     F = hands.shape[0]
     out_h = np.zeros_like(hands)
     out_m = np.zeros_like(hmask)
+    pose_vis = a["pose"][..., 3].astype(np.float32) if a["pose"].shape[-1] >= 4 else np.ones((F, pose.shape[1]), np.float32)
+    prev_wr: list[np.ndarray | None] = [None, None]
     for i in range(F):
         idx = [j for j in range(2) if hmask[i, j]]
         if not idx:
@@ -55,7 +57,12 @@ def canonicalize(a: dict, pose_points: list[int]) -> dict:
             if len(idx) == 2:
                 slots = [0, 1] if d[0, 0] + d[1, 1] <= d[0, 1] + d[1, 0] else [1, 0]
             else:
-                slots = [int(np.argmin(d[0]))]
+                vis = np.array([pose_vis[i, P_RWR], pose_vis[i, P_LWR]], dtype=np.float32)
+                d_adj = d[0] + np.where(vis < 0.25, 0.25, 0.0)
+                for s_idx in range(2):
+                    if prev_wr[s_idx] is not None and float(np.linalg.norm(wr[0] - prev_wr[s_idx])) < 0.12 * aspect:
+                        d_adj[s_idx] *= 0.8
+                slots = [int(np.argmin(d_adj))]
         else:
             # Fallback: camera faces the signer, so the signer's right hand is on image-left.
             if len(idx) == 2:
@@ -65,6 +72,7 @@ def canonicalize(a: dict, pose_points: list[int]) -> dict:
         for j, s in zip(idx, slots):
             out_h[i, s] = hands[i, j]
             out_m[i, s] = True
+            prev_wr[s] = hands[i, j, WRIST, :2]
 
     pp = pose[:, pose_points, :2]
     return {"hands": out_h, "hmask": out_m, "pose": pp, "pose_full": pose[..., :2], "pmask": pmask}
@@ -197,7 +205,10 @@ def trim(c: dict, tcfg: dict) -> dict:
     e = min(F - int(np.argmax(anyh[::-1])) + pad, F)
 
     energy = _smooth(motion_energy(c), tcfg["smooth_window"])
-    moving = energy > tcfg["motion_threshold"]
+    # Adaptive floor suppresses high-frequency webcam tremor during Kiosk's 1.5s still-hold wait
+    p90 = float(np.percentile(energy[s:e], 90)) if e > s else 0.0
+    th = max(float(tcfg["motion_threshold"]), min(0.04, 0.16 * p90)) if p90 > 0.08 else float(tcfg["motion_threshold"])
+    moving = energy > th
     keep_still = tcfg.get("max_still_edge_frames", 10)
     idx = np.flatnonzero(moving[s:e])
     if len(idx):

@@ -23,6 +23,10 @@ def _prep_key(fcfg: dict) -> str:
 
 
 MANIFESTS = ("manifest.csv", "manifest_own.csv")  # WL-BISINDO videos + own live recordings (scripts/live_demo.py --record)
+# Signer 6 (GLEN) & Signer 7 (MUD) recorded Selamat Malam/Pagi/Siang/Sore in alphabetical order (39..42)
+# instead of the label_map.json IDs (39=Selamat siang, 40=Selamat sore, 41=Selamat pagi, 42=Selamat malam).
+SIGNER_67_LABEL_FIX = {39: 42, 40: 41, 41: 39, 42: 40}
+MAX_CLIPS_PER_SIGNER_LABEL = 15
 
 
 def _data_key(data_dir) -> str:
@@ -64,9 +68,16 @@ def load_dataset(cfg: dict) -> tuple[list[dict], pd.DataFrame]:
         p = cache_path(cfg, r.clip_id)
         if r.clip_id in excluded or not p.exists():
             continue
+        lbl = int(r.label)
+        if int(r.signer) in (6, 7) and lbl in SIGNER_67_LABEL_FIX:
+            lbl = SIGNER_67_LABEL_FIX[lbl]
         seqs.append(preprocess(load_npz(p), fcfg))
-        rows.append({"clip_id": r.clip_id, "signer": r.signer, "label": r.label, "sample": r.sample})
+        rows.append({"clip_id": r.clip_id, "signer": r.signer, "label": lbl, "sample": r.sample})
     meta = pd.DataFrame(rows)
+    if len(meta) and cfg.get("balance_signer_samples", True):
+        keep_idx = meta.groupby(["signer", "label"]).head(MAX_CLIPS_PER_SIGNER_LABEL).index.to_numpy()
+        seqs = [seqs[i] for i in keep_idx]
+        meta = meta.iloc[keep_idx].reset_index(drop=True)
     with open(cache, "wb") as f:
         pickle.dump((seqs, meta), f)
     return seqs, meta
