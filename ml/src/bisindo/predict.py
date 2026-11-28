@@ -22,10 +22,11 @@ from typing import Any
 import numpy as np
 import onnxruntime as ort
 
+from .augment import mirror
 from .calibrate import remap
 from .config import ML_ROOT
 from .evaluate import known_confidence, softmax
-from .features import featurize
+from .features import featurize, preprocess, resample, to_features, trim
 from .schema import Sequence, load_npz, sequence_to_arrays
 
 DEFAULT_ARTIFACTS = ML_ROOT / "artifacts"
@@ -65,6 +66,33 @@ class Predictor:
         m = self.label_map.get(str(lbl), {"phraseId": f"label_{lbl:02d}", "text": f"label_{lbl:02d}"})
         return {"phraseId": m["phraseId"], "label": m["text"], "confidence": round(float(conf), 4)}
 
+    def _build_tta_views(self, a: dict) -> np.ndarray:
+        """Build multi-view TTA batch [V, T, D] to handle Kiosk still-hold tails & left-handed/mirrored signing."""
+        c_std = preprocess(a, self.fcfg)
+        T = self.fcfg["T"]
+        views = [to_features(resample(c_std, T), self.fcfg)]
+
+        # View 2: tighter trim for Kiosk auto-capture sequences (strips 250ms start debounce & 1500ms still-hold tail)
+        tcfg_base = self.fcfg.get("trim", {})
+        if tcfg_base.get("enabled", True) and len(c_std["hmask"]) > 16:
+            tcfg_tight = {
+                **tcfg_base,
+                "motion_threshold": float(tcfg_base.get("motion_threshold", 0.02)) * 1.65,
+                "max_still_edge_frames": 3,
+                "pad_frames": 1,
+            }
+            c_tight = trim(c_std, tcfg_tight)
+            if len(c_tight["hmask"]) < len(c_std["hmask"]):
+                views.append(to_features(resample(c_tight, T), self.fcfg))
+
+        # View 3: if signing is predominantly 1-handed in slot 1 (left hand / unflagged mirrored webcam), add mirrored view
+        hm = c_std["hmask"]
+        if len(hm) and hm[:, 1].mean() > 0.45 and hm[:, 0].mean() < 0.15:
+            c_mir = mirror(c_std, self.fcfg["pose_points"])
+            views.append(to_features(resample(c_mir, T), self.fcfg))
+
+        return np.stack(views, axis=0)
+
     def predict_arrays(self, a: dict, top_k: int = 3) -> dict:
         n_frames = len(a["t_ms"])
         if n_frames > self.max_frames:
@@ -73,9 +101,32 @@ class Predictor:
         if n_hand_frames < self.fcfg["min_frames_for_inference"]:
             return {"phraseId": None, "label": None, "confidence": 0.0, "action": "reject", "audio": None,
                     "reason": "too_short", "topK": [], "debug": {}}
-        x = featurize(a, self.fcfg)[None]
-        logits, emb = self.sess.run(None, {"x": x})
-        probs = softmax(logits, self.th["temperature"])
+        x_views = self._build_tta_views(a)
+        logits_v, emb_v = self.sess.run(None, {"x": x_views})
+        probs_v = softmax(logits_v, self.th["temperature"])
+
+        # Score each TTA view by peak known confidence and centroid cosine similarity
+        if len(x_views) == 1:
+            logits, emb, probs = logits_v, emb_v, probs_v
+        else:
+            best_v_cls = probs_v[:, : self.K].argmax(axis=1)
+            e_norm = emb_v / (np.linalg.norm(emb_v, axis=-1, keepdims=True) + 1e-8)  # [V,M,E]
+            sims_v = np.array([
+                float((e_norm[v] * self.C[:, best_v_cls[v]]).sum(-1).mean())
+                for v in range(len(x_views))
+            ], dtype=np.float32)
+            pk_max_v = probs_v[:, : self.K].max(axis=1)
+            view_scores = pk_max_v * (0.5 + 0.5 * np.clip(sims_v, 0.0, 1.0))
+            # Blend primary view with the highest-scoring view
+            best_v = int(np.argmax(view_scores))
+            if best_v == 0:
+                logits, emb, probs = logits_v[:1], emb_v[:1], probs_v[:1]
+            else:
+                w_best = 0.65 if view_scores[best_v] > view_scores[0] * 1.08 else 0.45
+                logits = (1.0 - w_best) * logits_v[:1] + w_best * logits_v[best_v : best_v + 1]
+                emb = (1.0 - w_best) * emb_v[:1] + w_best * emb_v[best_v : best_v + 1]
+                probs = softmax(logits, self.th["temperature"])
+
         pred, conf = known_confidence(probs, self.K)
         raw_conf = float(conf[0])
         best = int(probs[0, : self.K].argmax())
@@ -84,7 +135,14 @@ class Predictor:
         sim = float((e * self.C[:, best]).sum(-1).mean())
         reason = None
         if pred[0] == -2:
-            reason = "none_class"
+            # Check if a strong known sign was overly penalized by none_class due to live webcam jitter
+            pk_norm = softmax(logits[:, : self.K], self.th["temperature"])
+            none_p = float(probs[0, self.K]) if probs.shape[1] > self.K else 0.0
+            if sim >= self.th["centroid_sim_min"] + 0.10 and float(pk_norm[0, best]) >= 0.78 and none_p < 0.78:
+                raw_conf = max(raw_conf, float(self.th["raw_confirm"]) + 0.03 * float(pk_norm[0, best]))
+                reason = "rescued_from_none"
+            else:
+                reason = "none_class"
         if sim < self.th["centroid_sim_min"]:
             raw_conf = min(raw_conf, self.th["raw_confirm"] * 0.99)
             reason = reason or "far_from_centroid"
